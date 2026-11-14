@@ -6,7 +6,9 @@ export const MODE_LABEL: Record<RecordMode, string> = { live: '실제 운전', s
 
 function cell(v: unknown): string {
   if (v === null || v === undefined) return '';
-  const s = typeof v === 'number' ? (Number.isInteger(v) ? String(v) : v.toFixed(4)) : String(v);
+  let s = typeof v === 'number' ? (Number.isInteger(v) ? String(v) : v.toFixed(4)) : String(v);
+  // 공유한 카메라 이름·메모가 스프레드시트 수식으로 실행되지 않게 텍스트로 내보낸다.
+  if (typeof v === 'string' && /^[\s\u0000-\u001f]*[=+\-@]/.test(s)) s = "'" + s;
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -61,3 +63,4 @@ export function stamp(d = new Date()) {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
 }
+

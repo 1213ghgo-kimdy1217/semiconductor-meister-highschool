@@ -1,381 +1,132 @@
-# 인수인계 — 4인치 모형 웨이퍼 검사 웹 콘솔 (2026-11-14 기준)
+# 인수인계 — 4인치 모형 웨이퍼 검사 웹 콘솔
 
-다음 작업자가 바로 이어서 일할 수 있게 지금까지 한 일, 막힌 곳, 남은 일을 정리한 문서다.
-기준 요구사항은 「BAZE 개발 지시서 — 4인치 모형 웨이퍼 검사·분류」(2026-11-13,
-`BAZE_Wafer_Inspection_Build_Brief_4inch.md`)이다.
+2026-11-14 갱신. 기준은 사용자 제공 `BAZE_Wafer_Inspection_Build_Brief_4inch.md`와 Uno 규약 V1이다. 지시서 원문과 `.baze-files/`는 공개 저장소에 올리지 않는다. 최신 시험 결과는 [TEST_RESULTS.md](TEST_RESULTS.md)를 읽는다.
 
-- 저장소가 공개라 지시서는 GitHub에 올리지 않았다. 사용자에게 받는다.
-- BAZE 프로젝트 안에서는 `.baze-files/outputs/`에 사본이 있다.
-- 이 문서와 지시서가 다르면 지시서와 2장의 사용자 결정을 따른다.
+## 0. 현재 상태
 
-## 0. 한눈에
+- 기존 검사 콘솔·시험 모드·기준 등록·판정·CSV·인쇄 시편 위에 Supabase 팀 로그인·지속 저장 대기열·팀 기록 조회를 추가하는 변경이다.
+- 사용자는 초안을 참고해 다시 구성하고 연결 설정을 기다리는 동안에도 구현하도록 승인했다.
+- 기존 전용 Supabase 프로젝트에 두 마이그레이션을 적용했다. 세 표·소유자 RLS·비공개 이미지 버킷과, 지연된 업로드가 새 기록/설정을 덮어쓰지 않게 하는 보호가 있다. SQL 역할 모의 RLS 시험은 68/68 통과했고 보안 advisors는 0건이었다. 시험 rollback 뒤 사용자·검사·이미지 행은 모두 0개임을 확인했다. 실제 이메일 로그인·REST·Storage HTTP 경로 시험과는 별개다.
+- 확인 시점의 Auth 사용자 수는 0명이었다. 현재 작업 환경에는 `SUPABASE_DB_PASSWORD`와 `SUPABASE_PUBLISHABLE_KEY`가 없었다. 이전 BAZE 대화에는 두 값이 잘못됐다는 기록이 있다. 이후 변경 여부는 값을 노출하지 않고 다시 검증한다.
+- 작업 브랜치는 `codex/team-cloud-storage`, 검토용 [초안 PR #2](https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool/pull/2)가 열려 있다. main 직접 푸시·임의 병합은 하지 않는다.
+- [Vercel 운영 사이트](https://wafer-inspection-4inch.vercel.app)를 파일 업로드 방식으로 배포했고 제공자 상태는 Production READY다. 배포 코드는 `a70ee06ea10fc2e0b80624597add475c3994bf3c`다. GitHub 자동 동기화는 없으며 변경 후 별도 재배포가 필요하다. 실제 운영 HTTP/화면 점검은 연결 실패로 미완료다.
+- 실제 카메라·Uno·PLC·HMI·기구 통합은 미실시다.
 
-- 끝난 것: 검사 콘솔, 시험 모드(가상 장치), 기준 사진 등록, 판정·기록·CSV, 인쇄용 시편, 문서 5종. 시험은 모두 통과했고 GitHub `main`에 올라가 있다.
-- 남은 큰 일: 지시서 11장의 **Supabase 팀 로그인·공유 저장**. Supabase 프로젝트만 만들어져 있다. 표·버킷·코드는 아직 없다.
-- 지금 막힌 것: BAZE의 Supabase 연결 토큰에 쓰기 권한이 없다. 환경 변수 두 값(DB 비밀번호, 공개용 키)도 잘못 들어가 있다. **사용자가 두 값을 고친 뒤에 시작한다** (5-1).
-- 실물 작업(펌웨어 대조, 실제 카메라 재촬영, PLC·Uno·기구 통합)은 장치가 있어야 한다 (5-6).
+## 1. 저장소와 실행
 
-## 1. 저장소·실행
+저장소: [semiconductor-meister-highschool](https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool). 별도 SemiGuard 교육 사이트 `semiguard-ai`는 수정하지 않는다.
 
-- GitHub: https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool (공개)
-  - 앱 코드의 마지막 변경은 `main`의 커밋 `1efe2b5`(2026-11-14)다. 그 뒤 커밋은 이 문서와 `AGENTS.md` 메모뿐이다.
-  - `.baze-files/`(BAZE 파일 보관함, 지시서 사본이 있음)는 커밋하지 않는다.
-- 기술: Vite 7 · React 19 · TypeScript 5.9 · Tailwind 4 · react-router 7 · idb 8.
-  - `@supabase/supabase-js ^2.119.0`은 의존성에만 있고 코드에서 아직 쓰지 않는다.
-  - 서버(Worker) 코드가 없는 정적 앱이다.
-- 명령
-  - `npm ci`
-  - `npm run dev` (포트 5173, `--host 0.0.0.0`)
-  - `npm test` (vitest, 59개)
-  - `npm run typecheck`
-  - `npm run build` (타입 검사 + `dist/`)
-  - 브라우저 시나리오: 개발 서버를 켠 상태에서 `npm i --no-save playwright && npx playwright install chromium && node tests/e2e/sim-flow.cjs` (25개). 개발 빌드에만 있는 `window.__station`을 읽으므로 개발 서버에서만 돈다.
-- 카메라와 USB(Web Serial)는 HTTPS 또는 localhost의 Chrome·Edge에서만 동작한다.
-- 기존 SemiGuard 교육 사이트(별도 저장소 `semiguard-ai`)는 다른 프로젝트다. 건드리지 않는다.
+Vite 7·React 19·TypeScript 5.9·Tailwind 4·react-router 7·idb 8, Supabase JS 2.119.0을 쓴다. `@types/node` 24.0.0과 `undici-types` 7.8.0도 lockfile에 고정했다. `package-lock.json`을 유지하고 Node.js 24를 권장한다.
 
-## 2. 바꾸면 안 되는 규칙 (지시서 + 사용자 결정)
-
-1. 웹은 촬영·판정·결과(OK/NG)·CAPTURE_FAILED 전달만 한다. 이동·운전·정지·복구·수거 확인은 PLC/HMI가 맡는다. 웹에 운전 버튼을 만들지 않는다.
-2. HOLD·판정 불확실·장치 실패에서 자동 NG·방출·복구·재개를 하지 않는다. 판정이 불확실하면 보내지 않고 장치의 60초 시간 초과에 맡긴다.
-3. Uno 규약 V1(`PROTOCOL.md`)이 이전 제안(C/A/E)을 대체한다.
-   - RESULT 값은 OK/NG뿐이다. HOLD·UNKNOWN·점수·사진·버전 필드를 붙이지 않는다.
-   - 점수와 검사기 버전은 웹과 Supabase에만 기록한다.
-4. Supabase 행 변경이나 Realtime 메시지를 장치 명령 큐로 쓰지 않는다.
-5. DB 장애가 판정·결과 전송 경로를 멈추면 안 된다.
-   - 로컬에 먼저 저장하고 업로드는 뒤에서 한다.
-   - 실패하면 IndexedDB 대기열에 두고 다시 시도하며, 그 상태를 화면에 보인다.
-6. 브라우저에는 publishable key만 쓴다. secret(`sb_secret_…`)과 service_role 키는 브라우저·번들·GitHub·채팅 어디에도 넣지 않는다. 이미지 버킷은 비공개(private)에 소유자 정책을 둔다.
-7. 시험 모드는 실제 포트를 열지 않고 PLC 판정 신호도 내보내지 않는다. 시험 기록은 실제 통계와 따로 집계한다.
-8. 실제 반도체 미세 결함 검사 성능을 주장하지 않는다. 확인하지 않은 하드웨어 값은 지어내지 않고 `HARDWARE_VALUES.md`에 빈칸으로 둔다.
-9. 교정 전에는 실제 운전을 잠가 둔다. 펌웨어 대조 대상은 `arduino/Wafer_Two_Gate_PLC/controller.h`다.
-10. 카메라, 영상 비교, 통신 파서, 상태 전이, DB 저장을 한 컴포넌트에 몰아넣지 않는다.
-11. 사용자 결정: 팀 로그인·기록 공유는 Supabase로 하고, 인쇄용 시편은 앱에서 만든다(완료).
-    - 로그인은 팀이 함께 쓰는 계정 하나(이메일+비밀번호)로 여러 PC가 같은 기록을 보는 방식으로 제안했다.
-    - 지시서의 "소유 행만" 규칙은 그대로 지킨다.
-
-## 3. 지금까지 한 것
-
-### 화면
-
-- `/` 검사 콘솔
-  - 상단 네 칸: 카메라 · Uno USB · PLC 요청/운전 허가 · 기록 저장
-  - 실시간 영상과 ROI, 공정 단계, 마지막 판정과 근거, 최근 10개 기록과 집계
-  - 작업자 버튼: 카메라 연결 · 장치 연결 · 기준 사진 등록 · 검사만 시험 · 기록 내보내기(CSV)
-- 상단 「시험 모드」: 가상 카메라·Uno·PLC·HMI·작업대. 실제 포트를 열지 않는다.
-- `/print` 인쇄용 시편: 정상 A, 불량 A(권장)·B·C. A4 실제 크기로 인쇄하거나 SVG로 받는다. 자르는 원은 지름 101.6mm이고, 시편 안에는 글자와 QR이 없다.
-
-### 코드 구조 (`src`)
-
-| 위치 | 하는 일 |
-|---|---|
-| `core/camera` | 실제·가상 카메라, 프레임 |
-| `core/vision` | 정렬·마스크·기준 비교·판정(`analyze.ts`) |
-| `core/protocol` | Uno 규약 V1 줄 파서·링크(`v1.ts`, `link.ts`, `linebuffer.ts`) |
-| `core/transport` | 실제 시리얼과 가상 장치(같은 인터페이스) |
-| `core/station/cycle.ts`, `core/process/flow.ts`, `core/inspect/runner.ts` | 검사 요청 하나의 상태 전이 |
-| `core/store` | IndexedDB 저장(`local.ts`), 자료형(`types.ts`), CSV |
-| `core/specimen` | 인쇄 시편 생성 |
-| `app/station.ts` | 앱 상태와 기록 흐름 (약 700줄) |
-| `app/useStation.ts` | React 연결 |
-| `ui/console/*` | 화면 조각 (`TopBar`, `RecordsPanel` 등) |
-| `pages/*` | 화면 (`Console`, `PrintSpecimens`) |
-
-### 브라우저 저장 (이 PC에만)
-
-- IndexedDB 이름 `wafer-inspection-4inch`, 버전 1. 저장소 세 개:
-  - `kv`: 카메라별 설정, 고른 카메라(`camera:choice`) 등
-  - `records`: keyPath `id`, 색인 `byTime`(requestedAt)
-  - `events`: autoIncrement, 색인 `byRecord`(recordId)
-- `local.ts`는 쓰기를 내부 대기열로 묶는다. 같은 kv 키 쓰기는 합친다.
-- 기록 자료형은 `core/store/types.ts`에 있다.
-  - `InspectionRecord`: mode(`live`/`sim`/`check`), session·cycle·capture, verdict(OK/NG/HOLD), PLC 전달 상태, 분기, 배출 종료(`released`), 실물 수거 확인(`collectionConfirmed`, 웹은 알 수 없어 항상 false), 96px 회색 PNG 썸네일 등
-  - `StoredEvent`
-  - `ProfileSettings`: ROI·기준값·기준 버전·기준 사진(`pixels`는 휘도 `Uint8Array`)
-- 기록 `id`는 `crypto.randomUUID()`다.
-- `session`은 포트를 열 때마다 새로 정하는 난수(1 ~ 2^31−1)다. `cycle`은 Uno가 발행하고, `capture`는 세션 안에서 1부터 늘어난다.
-
-### 문서
-
-- `PROTOCOL.md`: 웹이 구현한 Uno 규약 V1. 10장은 펌웨어 대조표다.
-- `COMMISSIONING.md`: 0~10단계 시운전 순서
-- `HARDWARE_VALUES.md`: 미확정 실물 값 빈칸
-- `TEST_RESULTS.md`: 검증 범위와 결과
-- `README.md`, `.env.example`, `AGENTS.md`(다음 작업자 메모)
-
-### 시험 (2026-11-14)
-
-- 단위 시험 59/59, 타입 검사, 빌드 통과
-- 시험 모드 브라우저 시나리오 25/25 통과, 콘솔 오류 없음
-- 실제 카메라·장치 시험은 하지 않았다 (장치 없음).
-
-## 4. Supabase 현재 상태
-
-### 프로젝트
-
-| 항목 | 값 |
-|---|---|
-| 이름 | `wafer-inspection-4inch` (사용자가 대시보드에서 직접 만듦) |
-| ref / URL | `ebrpuysakbfjjnjwesjh` / `https://ebrpuysakbfjjnjwesjh.supabase.co` |
-| 지역 | `ap-southeast-2` (호주 시드니). 대시보드에 서울이 없어 Asia-Pacific을 고른 결과다. 업로드는 뒤에서 하므로 판정 속도에는 영향이 없다. |
-| 상태 | ACTIVE_HEALTHY, Postgres 17, 무료 요금제 조직 |
-| DB 접속 | 풀러 `aws-0-ap-southeast-2.pooler.supabase.com`, 5432(session)·6543(transaction), 사용자 `postgres.ebrpuysakbfjjnjwesjh`. 직접 주소 `db.<ref>.supabase.co`는 IPv6 전용이라 BAZE 샌드박스에서는 쓸 수 없다. 풀러 두 포트는 열려 있음을 확인했다. |
-| 만들어진 것 | Storage 버킷 0개(확인). 표와 Auth 사용자는 새 프로젝트라 없을 것이다(SQL 권한이 없어 직접 확인은 못 함). |
-| Auth 설정 | 읽을 권한이 없어 확인하지 못했다. 대시보드에서 확인할 것 (5-1). |
-
-### BAZE의 Supabase 연결 토큰 (`SUPABASE_ACCESS_TOKEN`)
-
-다시 연결(2026-11-14)한 뒤에도 결과가 같았다.
-
-- 되는 것: 프로젝트 목록, 조직 정보, Storage 버킷 목록, 풀러 설정 읽기
-- 안 되는 것 (403):
-  - 프로젝트 만들기 `organization_projects_create`
-  - SQL 실행 `database:write`
-  - API 키 읽기 `api_gateway_keys_read`
-  - Auth 설정 읽기 `auth_config_read`
-- 그래서 `supabase db push`나 Management API로는 표를 만들 수 없다. **DB 비밀번호로 풀러에 직접 붙어서** 만든다.
-- 이 토큰은 만료되며 게시 앱에는 들어가지 않는다.
-
-### 환경 변수 (BAZE 「설정 > 환경 변수」)
-
-| 이름 | 용도 | 상태 |
-|---|---|---|
-| `SUPABASE_DB_PASSWORD` | 작업자가 마이그레이션·RLS 시험에 쓰는 DB 접속용. 앱에는 넣지 않는다. | ❌ 현재 값이 틀림 |
-| `SUPABASE_PUBLISHABLE_KEY` | 브라우저가 쓸 공개용 키 (`sb_publishable_…`) | ❌ 현재 값이 틀림 |
-
-- 처음 넣을 때 카드에서 생성된 임의 값(둘 다 40자)이 들어간 것으로 보인다. 어느 쪽도 이 프로젝트의 API 키나 DB 비밀번호로 통하지 않았다.
-- 값을 확인할 때는 **일부도 출력하지 말고** 맞음/틀림만 출력한다 (6장 예시).
-
-### 키 다루는 방법 (정한 것)
-
-- BAZE 안에서는 값을 파일에 쓰지 않는다(플랫폼 규칙).
-  - 개발 서버(`vite.config.ts`의 `configureServer` / `configurePreviewServer` 미들웨어)가 `process.env`에서 URL과 공개용 키를 읽는다. 이것을 `/api/cloud-config` 같은 경로로 브라우저에 넘긴다.
-  - 서버 쪽에서 키 모양을 검사한다. `sb_secret_`로 시작하거나 role이 service_role인 JWT면 거부한다.
-- 지금 떠 있는 미리보기 개발 서버(09:13 시작)는 이 환경 변수를 모른다. 위 코드를 넣은 뒤 한 번 다시 띄워야 한다. BAZE 안이면 `preview-server` 스킬의 `stop-bg` / `serve-bg`를 쓴다.
-- BAZE 밖(로컬 PC)에서는 `.env.local`(`.gitignore`에 포함)의 `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY`를 읽어도 된다. 코드가 두 방법을 다 받게 하면 좋다. 커밋은 금지다.
-- 게시(BAZE 호스팅 등)할 때는 같은 경로를 서버가 환경 변수로 응답해야 한다. 아직 게시하지 않았다.
-
-## 5. 앞으로 할 일 (순서대로)
-
-### 5-1. 사용자가 먼저 할 일
-
-1. BAZE 「설정 > 환경 변수」에서 두 값을 고친다.
-   - `SUPABASE_DB_PASSWORD`: 프로젝트 DB 비밀번호. 모르면 Supabase의 Project Settings → Database → Reset database password에서 새로 만든다.
-   - `SUPABASE_PUBLISHABLE_KEY`: Project Settings → API Keys의 Publishable key (`sb_publishable_…`)
-2. Supabase 대시보드 Authentication → Users → Add user → Create new user에서 팀 계정을 만든다.
-   - 이메일과 비밀번호를 넣고 Auto Confirm User를 켠다.
-   - 비밀번호는 팀만 알고, 작업자나 채팅에는 주지 않는다.
-3. (권장) Authentication → Sign In / Providers에서 확인한다.
-   - Email 로그인이 켜져 있는지 본다.
-   - 새 가입(Allow new users to sign up)을 끈다. 저장소가 공개라 URL과 공개용 키는 누구나 볼 수 있기 때문이다.
-   - 익명 로그인이 꺼져 있는지 본다.
-   - 작업자 토큰은 Auth 설정 권한이 없어서 이 단계는 사용자가 해야 한다. 대시보드 문구는 바뀌었을 수 있다.
-
-### 5-2. 데이터베이스 (작업자)
-
-- 마이그레이션은 `supabase/migrations/<타임스탬프>_init.sql`로 커밋한다.
-- 풀러로 적용한다: `supabase db push --db-url …` 또는 node `pg`.
-- 접속 문자열은 명령 안에서 환경 변수로 조립한다. 출력하거나 파일에 쓰지 않는다. 비밀번호에 특수문자가 있으면 URL 인코딩한다.
-- 아래는 **초안이다. 아직 한 번도 실행하지 않았으니** 검토한 뒤 쓴다.
-
-```sql
--- 설정: 카메라 프로필(real/virtual)마다 한 행
-create table public.settings (
-  owner_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
-  camera_id text not null check (camera_id in ('real', 'virtual')),
-  roi jsonb not null,
-  calibration_version integer not null,
-  thresholds jsonb not null,
-  refs jsonb not null default '{}'::jsonb,           -- 기준 사진 메타데이터, 이미지는 버킷 경로
-  updated_at timestamptz not null default now(),
-  primary key (owner_id, camera_id)
-);
-
--- 검사: 브라우저 기록 하나 = 한 행. id는 브라우저 기록 id(randomUUID)를 그대로 쓴다.
-create table public.inspections (
-  id uuid primary key,
-  owner_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
-  device_session bigint,                               -- 검사만 시험(check)이면 null
-  cycle_id bigint,
-  capture_id bigint,
-  mode text not null check (mode in ('live', 'sim', 'check')),
-  verdict text not null check (verdict in ('OK', 'NG', 'HOLD')),
-  hold_reason text,
-  method text not null,
-  version text not null,
-  calibration_version integer not null,
-  scores jsonb,
-  capture_time timestamptz,                            -- firstFrameAt
-  decision_time timestamptz,                           -- decidedAt
-  requested_at timestamptz not null,
-  image_path text,                                     -- <owner_id>/inspections/<id>.png
-  plc_result_state text not null,                      -- PlcState 값 그대로
-  plc_detail text,
-  route text check (route in ('OK', 'NG')),
-  released boolean not null default false,
-  collection_confirmed boolean not null default false,
-  fault_code text,
-  closed_why text,
-  expected text,
-  camera text,
-  camera_label text,
-  attempts integer not null default 0,
-  trail jsonb not null default '[]'::jsonb,
-  frame_ids jsonb not null default '[]'::jsonb,
-  local_updated_at timestamptz not null,
-  created_at timestamptz not null default now(),
-  unique (owner_id, device_session, cycle_id, capture_id)  -- null은 서로 다르게 취급되어 check 기록은 겹치지 않음
-);
-create index inspections_owner_created_idx on public.inspections (owner_id, created_at desc);
-
--- 이벤트: 브라우저마다 device_id 하나 + IndexedDB 자동 번호로 중복 방지
-create table public.events (
-  id bigint generated always as identity primary key,
-  owner_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
-  inspection_id uuid references public.inspections (id) on delete set null,  -- 검사 행이 먼저 올라가야 함
-  device_id uuid not null,
-  local_event_id bigint not null,
-  event_type text not null,
-  payload jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null,
-  unique (owner_id, device_id, local_event_id)
-);
-create index events_owner_created_idx on public.events (owner_id, created_at desc);
-
-alter table public.settings enable row level security;
-alter table public.inspections enable row level security;
-alter table public.events enable row level security;
-revoke all on public.settings, public.inspections, public.events from anon;
-grant select, insert, update on public.settings, public.inspections, public.events to authenticated;
-
--- 세 표 모두 같은 세 정책: 로그인한 본인 행만 SELECT/INSERT/UPDATE. DELETE 정책은 만들지 않는다.
-create policy settings_select_own on public.settings for select to authenticated
-  using (owner_id = (select auth.uid()));
-create policy settings_insert_own on public.settings for insert to authenticated
-  with check (owner_id = (select auth.uid()));
-create policy settings_update_own on public.settings for update to authenticated
-  using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
--- inspections_*, events_* 도 이름만 바꿔 똑같이 만든다.
--- (선택) 익명 로그인을 막으려면 조건에 and coalesce(((select auth.jwt()) ->> 'is_anonymous')::boolean, false) = false 추가
-
--- 비공개 이미지 버킷 + 소유자 폴더 정책 (경로 첫 폴더 = 사용자 id)
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('inspection-images', 'inspection-images', false, 2097152, array['image/png', 'image/jpeg'])
-on conflict (id) do nothing;
-create policy images_select_own on storage.objects for select to authenticated
-  using (bucket_id = 'inspection-images' and (storage.foldername(name))[1] = (select auth.uid())::text);
-create policy images_insert_own on storage.objects for insert to authenticated
-  with check (bucket_id = 'inspection-images' and (storage.foldername(name))[1] = (select auth.uid())::text);
-create policy images_update_own on storage.objects for update to authenticated
-  using (bucket_id = 'inspection-images' and (storage.foldername(name))[1] = (select auth.uid())::text)
-  with check (bucket_id = 'inspection-images' and (storage.foldername(name))[1] = (select auth.uid())::text);
+```bash
+npm ci
+npm run dev
+npm test
+npm run typecheck
+npm run build
+npm run preview
 ```
 
-### 5-3. 앱 코드 (작업자)
+개발 서버는 5173, preview는 4173이다. 카메라와 Web Serial은 PC Chrome·Edge의 HTTPS 또는 localhost에서 쓴다. 브라우저 시험은 개발용 `window.__station`을 읽으므로 개발 서버에서 실행한다.
 
-**구조**
-
-- 새 모듈은 `src/core/cloud/`에 둔다 (설정 받기, 클라이언트, 대기열, 동기화, 자료 변환).
-- 화면은 `src/ui/console/`에 둔다 (로그인 패널, 저장 상태).
-- `station.ts`에는 "저장했음 → 대기열에 넣기" 같은 좁은 인터페이스만 연결한다.
-
-**저장 흐름**
-
-- 로컬 IndexedDB에 먼저 저장하고, 대기열(outbox)에 넣은 뒤, 뒤에서 업로드한다.
-- 판정과 결과 전송 경로에서는 업로드를 `await`하지 않는다.
-- IndexedDB 버전을 1에서 2로 올리고 `outbox` 저장소를 추가한다. 기존 `kv`·`records`·`events`는 그대로 남는지 이관 시험을 한다.
-
-**업로드**
-
-- `inspections`: upsert (`on_conflict=id`). 같은 기록이 여러 번 갱신되면 대기열에서 최신 상태 하나로 합친다.
-- `events`: 중복 무시 insert (`owner_id, device_id, local_event_id`). 그 기록의 검사 행 다음에 올린다.
-- `settings`: upsert (`owner_id, camera_id`).
-
-**재시도와 상태 표시**
-
-- 지수 백오프로 다시 시도한다 (예: 2초 → 최대 5분, 지터). `online` 이벤트와 화면이 다시 보일 때 즉시 재개한다.
-- 오류를 나눈다: 네트워크 / 401 로그인 만료 / 403 정책 거부 / 409 충돌 / 스키마 불일치.
-- 상단 「기록 저장」 칸에 상태를 보인다. 한국어 해요체로 쓴다.
-  - 이 PC에만 저장 (로그인 전)
-  - 팀 저장 대기 N건
-  - 저장 실패 · 다시 시도 중 (이유)
-  - 모두 저장됨 (시각)
-- 로그인한 이메일과 로그아웃 버튼을 둔다. 앱에는 가입 화면을 두지 않는다 (계정은 대시보드에서 만든다).
-
-**이미지**
-
-- 썸네일(96px 회색 PNG data URL)은 비공개 버킷 `inspection-images/<owner_id>/inspections/<id>.png`에 올리고 `image_path`를 채운다.
-- 기준 사진(`StoredReference.pixels`, 휘도 배열)은 PNG로 바꿔 `<owner_id>/refs/<camera>/<kind>-v<calibrationVersion>.png`에 올린다. `settings.refs`에는 메타데이터만 둔다.
-
-**mode**
-
-- 시험 모드와 검사만 시험 기록도 `mode`로 구분해 올린다. 화면 집계는 지금처럼 mode별로 나눈다.
-
-**사용자와 정할 것**
-
-- 로그인 전에 쌓인 이 PC 기록을 로그인 뒤 올릴지 (백필)
-- 다른 PC의 기록을 보는 「팀 기록」 목록과 CSV를 만들지. 지금 화면은 이 PC의 최근 10개만 보인다. 만든다면 `(owner_id, created_at)` 색인으로 페이지 단위로 읽는다.
-- 두 PC가 기준 사진을 따로 등록했을 때 어느 쪽을 쓸지. 예: `calibration_version`이 큰 쪽을 쓰고 사용자에게 알림.
-
-**주의**
-
-- 로그아웃 상태에서 쌓인 대기열은 다음에 로그인한 계정으로 올라간다. 대기열 항목에 의도한 계정을 적거나, 로그인할 때 확인한다.
-- Realtime은 쓰지 않는다. 쓰더라도 표시용으로만 쓰고 장치 명령에는 절대 쓰지 않는다.
-
-### 5-4. 검증 (작업자)
-
-- 단위 시험: 대기열 합치기, 백오프, 오류 분류, 자료 변환, IndexedDB 1→2 이관
-- RLS를 SQL로 확인한다. 트랜잭션 안에서 `set local role authenticated`와 `set local request.jwt.claims`로 사용자 A·B를 흉내 낸 뒤 rollback한다.
-  - A가 B의 행을 SELECT·UPDATE할 수 없다.
-  - `owner_id = B`로 INSERT할 수 없다.
-  - DELETE는 막힌다.
-  - anon 역할에서는 0행이다.
-- RLS를 실제 경로(REST·Storage)로도 확인한다.
-  - 임시 사용자 둘로 로그인해 위 항목을 다시 본다.
-  - 남의 폴더 업로드·읽기가 막히고 버킷이 공개가 아닌지 본다.
-  - 끝나면 임시 사용자를 지운다.
-- 앱 흐름(시험 모드)
-  - 로그인 → 검사 → 업로드됨을 확인한다.
-  - 네트워크를 끊으면 대기 N건이 되고, 다시 연결하면 자동으로 올라가는지 본다.
-  - 업로드가 실패하는 동안에도 판정과 결과 전송이 그대로 진행되는지 본다.
-  - 이 흐름을 `tests/e2e`에 시나리오로 추가한다.
-- `npm test`, `npm run typecheck`, `npm run build`, e2e를 모두 통과시킨다.
-- `dist/`에 `sb_secret_`나 service_role 문자열이 없는지 검사한다.
-- `TEST_RESULTS.md`에 결과를 적는다. 실제 장치 시험이 아닌 것은 그렇다고 쓴다.
-
-### 5-5. 문서·커밋 (작업자)
-
-- `README.md`: 팀 로그인 사용법과 환경 변수 설명
-- `.env.example`
-- `TEST_RESULTS.md`, `AGENTS.md`
-- 마이그레이션 파일
-- 모두 커밋하고 `main`에 푸시한다. 키와 비밀번호는 절대 커밋하지 않는다.
-
-### 5-6. 실물 쪽 (장치가 있어야 함)
-
-- 펌웨어 `arduino/Wafer_Two_Gate_PLC/controller.h`와 STL을 아직 받지 못했다. 받으면 `PROTOCOL.md` 10장 표로 대조한다.
-- 실제 카메라로 정상·불량 각 10회 이상 다시 찍고 판정 기준값을 다시 정한다 (`HARDWARE_VALUES.md` 6장).
-- `COMMISSIONING.md` 0~10단계 순서로 시운전하고 통합 인수한다 (지시서 12장).
-- `HARDWARE_VALUES.md` 빈칸은 실측한 값으로만 채운다.
-
-### 5-7. 선택: 게시
-
-- 아직 게시하지 않았다.
-- 게시한다면 공개용 키를 넘기는 경로를 서버 쪽에도 만들어야 한다 (4장).
-- 카메라와 USB 때문에 HTTPS가 필요하다.
-
-## 6. 값 확인 예시 (값을 출력하지 않음)
-
-```js
-// node check.mjs — 결과만 출력한다. 값이나 그 일부는 절대 출력하지 않는다.
-import pg from "pg";
-const ref = "ebrpuysakbfjjnjwesjh";
-const key = process.env.SUPABASE_PUBLISHABLE_KEY ?? "";
-const r = await fetch(`https://${ref}.supabase.co/auth/v1/settings`, { headers: { apikey: key } });
-console.log("공개용 키 모양:", key.startsWith("sb_publishable_"), "/ 키 통함:", r.status === 200);
-const c = new pg.Client({ host: "aws-0-ap-southeast-2.pooler.supabase.com", port: 5432,
-  user: `postgres.${ref}`, password: process.env.SUPABASE_DB_PASSWORD, database: "postgres",
-  ssl: { rejectUnauthorized: false } });
-try { await c.connect(); console.log("DB 비밀번호 통함: true"); }
-catch (e) { console.log("DB 비밀번호 통함: false", e.code); }
-finally { await c.end().catch(() => {}); }
+```bash
+npm install --no-save --package-lock=false playwright@1.56.1
+npx playwright install chromium
+node tests/e2e/sim-flow.cjs
+node tests/e2e/cloud-flow.cjs
 ```
+
+작업 환경의 GitHub/npm DNS 제한으로 로컬 실행 대신 GitHub Actions를 사용했다. 커밋 `a70ee06ea10fc2e0b80624597add475c3994bf3c`의 [최종 CI](https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool/actions/runs/43604547968)에서 `npm ci`·단위 96/96·타입 검사·빌드·번들 비밀값 검사·기존 브라우저 25/25·클라우드 브라우저 28/28이 통과했다. CI는 Ubuntu 24.04에서 Playwright 1.56.1을 `/tmp/wafer-browser`에 분리 설치한다. 클라우드 28개에는 로그인 대기 중 로그아웃과 다른 탭의 오래된 쓰기 회귀 시험이 포함된다. 클라우드 브라우저의 모의 응답 시험과 실제 Auth·REST·Storage HTTP 시험을 구분한다. 후자는 계정/공개용 키 미준비로 미실시이며 하드웨어 시험도 미실시다. 최종 결과는 `TEST_RESULTS.md`가 기준이다.
+
+## 2. 고정 규칙과 확정 결정
+
+1. 웹은 촬영·판정·OK/NG·CAPTURE_FAILED 전달과 기록만 한다. 운전·이동·정지·복구·수거 확인은 PLC/HMI가 맡는다.
+2. HOLD·불확실·장치 실패를 자동 NG·방출·복구·재개로 바꾸지 않는다. 확정되지 않은 판정은 보내지 않고 장치의 60초 시간 초과에 맡긴다.
+3. RESULT에는 OK/NG만 넣는다. 사진·점수·검사기 버전은 웹과 DB에만 기록한다.
+4. Supabase와 Realtime을 장치 명령 통로로 쓰지 않는다. 업로드를 검사/결과 전송 경로에서 await하지 않는다.
+5. 시험 모드는 실제 포트를 열거나 PLC 판정 신호를 보내지 않는다. live/sim/check를 조회·집계·CSV에서 구분한다.
+6. 배출 동작 종료와 실물 수거 확인을 분리한다. 규약에 수거 확인 알림이 없어 `collectionConfirmed`는 false이며 DB도 true를 거부한다.
+7. 실제 성능과 하드웨어 값을 지어내지 않는다. 교정 전 실제 운전 잠금을 유지한다.
+8. 팀은 이메일·비밀번호 계정 하나를 여러 PC에서 사용한다. 앱에는 가입 화면이 없다.
+9. 로그인 전 항목은 현재 계정·항목 수를 확인하고 명시적으로 동의했을 때만 올린다.
+10. `/team`에서 모드별 페이지 목록과 선택 모드 전체 CSV를 제공한다.
+11. 기준 사진·ROI·판정 기준은 PC별로 유지하고 다른 PC의 기준을 자동 적용하지 않는다.
+
+## 3. 코드와 로컬 저장
+
+| 위치 | 역할 |
+|---|---|
+| `core/camera`, `core/vision` | 카메라/새 프레임·기준 영상 비교 |
+| `core/protocol`, `core/transport` | Uno V1 파서·연결·실제/가상 transport |
+| `core/station`, `core/inspect`, `core/process` | 검사 요청·판정 합의·공정 표시 |
+| `core/store/local.ts` | 로컬 자료와 지속 업로드 대기열 |
+| `core/cloud` | 소유자 배정·자료 변환·로그인·동기화·재시도·팀 조회 |
+| `config/cloud.ts`, `vite.config.ts` | 공개용 설정 검증과 개발/preview 응답 |
+| `ui/console/CloudPanel.tsx`, `app/useCloud.ts` | 로그인·동의·재시도·저장 상태 |
+| `pages/TeamRecords.tsx` | 팀 기록과 CSV |
+| `supabase/migrations`, `tests/rls` | DB 스키마·정책과 SQL 시험 |
+
+IndexedDB 이름은 `wafer-inspection-4inch`, 버전은 2다. `kv`·`records`·`events`를 보존하고 `outbox`를 추가한다. 로컬 자료와 대기 항목은 같은 트랜잭션에 저장한다. v1 항목은 미배정 상태로 인덱싱하므로 로그인만으로 소유자가 바뀌지 않는다.
+
+PC UUID `device_id`와 항목별 소유자 메타데이터를 유지한다. 계정 A 항목은 B 로그인 후에도 A에 속한다. 동의받은 미배정 항목만 현재 계정에 배정한다. 대기 항목 수에는 검사·이벤트·설정이 포함되므로 웨이퍼 장수와 다르다.
+
+검사 최신 변경은 합치고 revision이 맞는 업로드 응답만 대기 항목을 지운다. 관련 이벤트는 검사 행 다음에 전송한다. 네트워크 실패는 지수 백오프·지터로 재시도하고 online/화면 복귀 때 재개한다. 로그인 만료·정책 거부·충돌·스키마 오류는 구분한다.
+
+사진은 비공개 `inspection-images` 버킷에 저장한다. 검사 썸네일은 `<owner_id>/inspections/<inspection-id>.png`, 기준은 `<owner_id>/refs/<device_id>/<real-or-virtual>/<kind>-<immutable-version>.png`다. 기준 휘도 배열은 PNG로 올리고 `settings.refs`에는 메타데이터·경로만 둔다. 팀 기준 자동 내려받기·교체는 없다.
+
+## 4. Supabase와 키 다루기
+
+| 항목 | 내용 |
+|---|---|
+| 전용 프로젝트 | `wafer-inspection-4inch` |
+| ref / API 주소 | `ebrpuysakbfjjnjwesjh` / `https://ebrpuysakbfjjnjwesjh.supabase.co` |
+| 지역 | `ap-southeast-2` (호주 시드니) |
+| 마이그레이션 | `supabase/migrations/20261114133634_init_team_storage.sql` |
+| 지연 업로드 보호 | `supabase/migrations/20261114134435_keep_newer_snapshots.sql` |
+| 표 | `public.settings`, `public.inspections`, `public.events` |
+| 이미지 | 비공개 `inspection-images`, PNG/JPEG·2MiB 제한 |
+
+두 마이그레이션은 이번 연결의 Supabase 도구로 적용했다. 두 번째는 `settings`·`inspections`의 더 오래된 `local_updated_at` 업로드가 최신 행을 되돌리지 못하게 한다. 이전 BAZE 토큰의 403 제한을 현재 도구 권한으로 단정하지 않는다. 이미 적용한 SQL은 재실행하지 않고 새 변경은 별도 마이그레이션으로 만든다.
+
+초안 대비 변경: `settings` 키는 `(owner_id,device_id,camera_id)`다. 검사 중복 기준에도 PC를 넣었다. 이벤트는 `(owner_id,device_id,local_event_id)`로 중복을 막고 소유자까지 포함한 외래키로 타인 검사 참조를 막는다. 세 표는 영구 로그인 사용자 본인 행 SELECT·INSERT·UPDATE만 허용하며 DELETE 권한은 없다. UPDATE에 USING/WITH CHECK를 함께 둔다. Storage는 소유 폴더와 객체 소유자가 모두 일치해야 한다.
+
+키·비밀번호·접속 문자열은 일부도 출력하거나 채팅/커밋에 넣지 않는다.
+
+| 환경 변수 | 사용처 |
+|---|---|
+| `SUPABASE_PUBLISHABLE_KEY` | 개발/preview 서버가 읽어 공개용 키만 `/api/cloud-config`로 전달 |
+| `SUPABASE_URL` | 서버용 API 주소, 생략하면 위 전용 프로젝트 주소 |
+| `SUPABASE_DB_PASSWORD` | 작업자의 DB 직접 연결·마이그레이션용만. 앱은 읽지 않음 |
+| `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` | BAZE 밖 로컬/정적 빌드의 공개 설정 |
+
+BAZE에서는 실제 값 파일을 만들지 않고 프로젝트 비밀값 설정을 쓴다. BAZE 밖에서는 무시되는 `.env.local`에 공개용 두 값만 둘 수 있다. 브라우저는 HTTPS Supabase 주소와 현대 publishable key만 받는다. legacy JWT·secret·service_role 키는 허용하지 않는다.
+
+Vite `/api/cloud-config`는 개발·preview용이고, Vercel에는 Node 24 `api/cloud-config`와 공통 공개 설정 검증을 구현했다. 미등록 API는 JSON 404, 화면 경로는 SPA fallback으로 처리한다. 새 의존성은 추가하지 않았다. API 없는 다른 정적 호스팅은 공개용 `VITE_` 빌드 설정 또는 같은 출처의 API가 필요하다. 설정이 없으면 로컬 검사·저장은 계속되고 로그인만 비활성화된다.
+
+현재 Vercel 프로젝트는 `prj_wkDJIFpPFENmdYfMXRoDg25ToeWy`, 팀은 `team_jygW9ZnBaGtmwpvrc8QVwKNq`다. `SUPABASE_URL`은 등록돼 있고 `SUPABASE_PUBLISHABLE_KEY`는 없다. Vercel 프로젝트 Settings → Environment Variables의 Production에 공개용 키를 직접 등록한 뒤 다시 배포한다. 키를 채팅으로 받거나 파일로 옮기지 않는다. BAZE와 Vercel 주소는 달라 기존 IndexedDB 기록이 자동 이관되지 않는다.
+
+## 5. 다음 확인 순서
+
+### 5-1. 계정과 실제 연결
+
+Supabase **Authentication → Users → Add user**에서 팀 계정을 만들고 이메일 확인을 완료한다. 비밀번호는 팀만 보관하며 작업자/채팅에 주지 않는다. Email 로그인을 켜고 공개 신규 가입과 익명 로그인을 끈다. 앱 가입 화면 유무만으로 서버 가입이 막히는 것은 아니다.
+
+실행 환경의 비밀값 설정에 실제 공개용 키를 공급한다. DB 직접 접속이 필요할 때만 `SUPABASE_DB_PASSWORD`도 공급한다. 키 형식과 API 성공 여부는 맞음/틀림으로만 확인한다. 기존 BAZE 값과 현재 작업 환경 값은 별개일 수 있다.
+
+### 5-2. 데이터베이스 검증
+
+`tests/rls/owner-policies.sql`은 관리자 연결에서 실행하고 전부 rollback한다. 68개 SQL 검증은 통과했다. A·B·익명 Auth·미로그인의 표/이미지 접근과 지연 업로드 보호를 검사하며 Storage의 직접 삭제 방지 장치는 유지한다.
+
+실제 Auth·REST·Storage 검증에는 두 임시 사용자로 로그인해 본인 쓰기, 타인 조회/수정/소유자 위조 거부, 타인 폴더 읽기/업로드 거부를 따로 확인해야 한다. 준비되지 않은 시험은 TEST_RESULTS에 미실시로 남긴다.
+
+### 5-3. 앱과 회귀 검증
+
+단위·타입·빌드·브라우저·번들 비밀값 검사를 실행한다. v1→v2 보존, 명시적 업로드 동의, A/B 소유권 유지, 오프라인/새로고침 대기열 유지, 저장 실패 중 OK/NG·결과 전달, 모드별 팀 조회·CSV를 확인한다. 모의 클라우드 응답을 실제 업로드 성공으로 표시하지 않는다.
+
+### 5-4. PR 전달
+
+README·환경 변수 예시·AGENTS·HANDOFF·TEST_RESULTS·마이그레이션을 최신 상태로 맞춘다. 비밀값/`.baze-files`/런타임 자료가 없는지 확인하고 새 브랜치에 커밋한 뒤 PR을 연다. main 직접 푸시·임의 병합은 하지 않는다.
+
+### 5-5. 실제 장치
+
+`arduino/Wafer_Two_Gate_PLC/controller.h`를 받으면 PROTOCOL 10장을 대조한다. 실제 카메라로 정상/불량 각 10회 이상 새로 재촬영하고 COMMISSIONING 순서로 정상 3회·불량 3회 분류와 실패 상황을 확인한다. HARDWARE_VALUES 빈칸은 실측값으로만 채운다. 서버 게시와 실물 검증을 구분한다.

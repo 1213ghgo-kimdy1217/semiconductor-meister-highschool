@@ -3,6 +3,7 @@
 import { Link } from 'react-router';
 import { SERIAL_SUPPORT_MSG, type Mode, type StationSnapshot } from '../../app/station';
 import { getStation, useNow } from '../../app/useStation';
+import { cloudStatusText, useCloud, type CloudView } from '../../app/useCloud';
 import { PLC_INTERFACE_VERIFIED } from '../../config/hardware';
 import { cameraSupport, type CameraSnapshot } from '../../core/camera/camera';
 import type { LinkSnapshot } from '../../core/protocol/link';
@@ -88,13 +89,17 @@ function plcCell(l: LinkSnapshot, mode: Mode): Cell {
   return { tone: 'off', value: 'PLC 검사 요청 대기', detail: `${unverified} · 장치 단계: ${phase}` };
 }
 
-function storeCell(s: StoreStatus, count: number): Cell {
-  const local = '이 PC 브라우저에만 저장 — 팀 공유 저장 연결 전';
+function storeCell(s: StoreStatus, count: number, cloud: CloudView): Cell {
+  const local = `이 PC 저장 ${count}건 · ${cloudStatusText(cloud)}`;
   switch (s.state) {
     case 'opening':
       return { tone: 'busy', value: '저장소 여는 중', detail: local };
-    case 'ok':
-      return { tone: 'ok', value: count ? `저장됨 · ${count}건` : '준비됨 · 기록 0건', detail: local };
+    case 'ok': {
+      const tone: Tone = cloud.state === 'blocked' || cloud.state === 'auth_required' || cloud.state === 'retrying'
+        ? 'warn'
+        : cloud.pending > 0 || cloud.state === 'syncing' ? 'busy' : 'ok';
+      return { tone, value: cloudStatusText(cloud), detail: `이 PC에는 ${count}건 저장됐어요${cloud.error ? ` · ${cloud.error.message}` : ''}` };
+    }
     case 'saving':
       return { tone: 'busy', value: `저장 중 · 대기 ${s.pending}건`, detail: local };
     case 'retrying':
@@ -106,11 +111,12 @@ function storeCell(s: StoreStatus, count: number): Cell {
 
 export function TopBar({ st, cam, link, store }: { st: StationSnapshot; cam: CameraSnapshot; link: LinkSnapshot; store: StoreStatus }) {
   const now = useNow(1000);
+  const cloud = useCloud();
   const station = getStation();
   const c = cameraCell(cam, st.mode);
   const u = unoCell(link, st.mode, now);
   const p = plcCell(link, st.mode);
-  const s = storeCell(store, st.records.length);
+  const s = storeCell(store, st.records.length, cloud);
   const open = link.phase !== 'closed' && link.phase !== 'lost';
 
   const switchMode = (m: Mode) => {
@@ -141,6 +147,7 @@ export function TopBar({ st, cam, link, store }: { st: StationSnapshot; cam: Cam
           <p className="text-[12px] text-steel">4인치(지름 101.6mm) 모형 · 한 장씩 투입 · 실제 반도체 미세 결함 검사가 아니에요</p>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-3">
+          <Link to="/team" target="_blank" rel="noopener" className="text-[13px] font-semibold text-signal underline-offset-2 hover:underline">팀 기록<span className="sr-only"> (새 탭)</span></Link>
           <Link to="/print" target="_blank" rel="noopener" className="text-[13px] font-semibold text-signal underline-offset-2 hover:underline">
             인쇄용 시편<span className="sr-only"> (새 탭)</span>
           </Link>
@@ -178,3 +185,4 @@ export function TopBar({ st, cam, link, store }: { st: StationSnapshot; cam: Cam
     </header>
   );
 }
+

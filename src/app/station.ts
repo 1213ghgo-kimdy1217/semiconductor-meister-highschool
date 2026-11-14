@@ -8,6 +8,8 @@ import { DeviceLink, type DeviceNotice, type LinkEvent } from '../core/protocol/
 import { CycleRunner, type CycleState } from '../core/station/cycle';
 import { recordsCsv, eventsCsv, downloadText, stamp } from '../core/store/csv';
 import { LocalStore } from '../core/store/local';
+import { CloudService } from '../core/cloud/service';
+import { loadCloudConfig } from '../config/cloud';
 import type { CameraChoice, CameraProfile, Expected, InspectionRecord, PlcState, ProfileSettings, RecordMode } from '../core/store/types';
 import { describeSerialError, requestSerialPort, SerialTransport, serialSupport, type SerialSupport } from '../core/transport/serial';
 import { SimTransport } from '../core/transport/sim';
@@ -114,6 +116,7 @@ export class Station {
   readonly camera = new CameraController();
   readonly link = new DeviceLink();
   readonly store = new LocalStore();
+  readonly cloud = new CloudService(this.store);
   private grabber = new RoiGrabber();
   private frames = new CameraFrames(this.camera, this.grabber, () => this.settings.roi);
   private runner: CycleRunner;
@@ -183,6 +186,8 @@ export class Station {
 
   async init() {
     await this.store.open();
+    // 클라우드 연결이나 업로드를 기다리지 않고 검사 화면을 준비한다.
+    void loadCloudConfig().then((config) => this.cloud.start(config)).catch(() => {});
     const [real, virtual, choice, recent] = await Promise.all([
       this.store.getKv<ProfileSettings>('profile:real'),
       this.store.getKv<ProfileSettings>('profile:virtual'),
@@ -693,3 +698,4 @@ export class Station {
     downloadText(`wafer-events-${stamp()}.csv`, eventsCsv(ev));
   }
 }
+
