@@ -8,6 +8,7 @@ import { SimPanel } from '../ui/console/SimPanel';
 import { TopBar } from '../ui/console/TopBar';
 import { VerdictPanel } from '../ui/console/VerdictPanel';
 import { VideoPanel } from '../ui/console/VideoPanel';
+import { CloudPanel } from '../ui/console/CloudPanel';
 
 export default function Console() {
   const st = useStation();
@@ -25,6 +26,7 @@ export default function Console() {
   return (
     <div className="min-h-screen">
       <TopBar st={st} cam={cam} link={link} store={store} />
+      <CloudPanel />
       <main className="grid gap-4 p-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
         <div className="flex min-w-0 flex-col gap-4">
           <VideoPanel st={st} cam={cam} refOpen={refOpen} onToggleRef={() => (refOpen ? closeRef() : setRefOpen(true))} draftRoi={refOpen ? draftRoi : null} />
@@ -43,3 +45,4 @@ export default function Console() {
     </div>
   );
 }
+
