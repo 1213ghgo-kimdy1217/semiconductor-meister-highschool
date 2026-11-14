@@ -9,6 +9,7 @@
 - 기존 전용 Supabase 프로젝트에 두 마이그레이션을 적용했다. 세 표·소유자 RLS·비공개 이미지 버킷과, 지연된 업로드가 새 기록/설정을 덮어쓰지 않게 하는 보호가 있다. SQL 역할 모의 RLS 시험은 68/68 통과했고 보안 advisors는 0건이었다. 시험 rollback 뒤 사용자·검사·이미지 행은 모두 0개임을 확인했다. 실제 이메일 로그인·REST·Storage HTTP 경로 시험과는 별개다.
 - 확인 시점의 Auth 사용자 수는 0명이었다. 현재 작업 환경에는 `SUPABASE_DB_PASSWORD`와 `SUPABASE_PUBLISHABLE_KEY`가 없었다. 이전 BAZE 대화에는 두 값이 잘못됐다는 기록이 있다. 이후 변경 여부는 값을 노출하지 않고 다시 검증한다.
 - 작업 브랜치는 `codex/team-cloud-storage`, 검토용 [초안 PR #2](https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool/pull/2)가 열려 있다. main 직접 푸시·임의 병합은 하지 않는다.
+- [Vercel 운영 사이트](https://wafer-inspection-4inch.vercel.app)를 파일 업로드 방식으로 배포했고 제공자 상태는 Production READY다. 배포 코드는 `a70ee06ea10fc2e0b80624597add475c3994bf3c`다. GitHub 자동 동기화는 없으며 변경 후 별도 재배포가 필요하다. 실제 운영 HTTP/화면 점검은 연결 실패로 미완료다.
 - 실제 카메라·Uno·PLC·HMI·기구 통합은 미실시다.
 
 ## 1. 저장소와 실행
@@ -35,7 +36,7 @@ node tests/e2e/sim-flow.cjs
 node tests/e2e/cloud-flow.cjs
 ```
 
-작업 환경의 GitHub/npm DNS 제한으로 로컬 실행 대신 GitHub Actions를 사용했다. 커밋 `3a542c4caf52c89797f557c18aff5af8554a2322`의 [최종 CI](https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool/actions/runs/43601806561)에서 `npm ci`·단위 88/88·타입 검사·빌드·번들 비밀값 검사·기존 브라우저 25/25·클라우드 브라우저 28/28이 통과했다. CI는 Ubuntu 24.04에서 Playwright 1.56.1을 `/tmp/wafer-browser`에 분리 설치한다. 클라우드 28개에는 로그인 대기 중 로그아웃과 다른 탭의 오래된 쓰기 회귀 시험이 포함된다. 클라우드 브라우저의 모의 응답 시험과 실제 Auth·REST·Storage HTTP 시험을 구분한다. 후자는 계정/공개용 키 미준비로 미실시이며 하드웨어 시험도 미실시다. 최종 결과는 `TEST_RESULTS.md`가 기준이다.
+작업 환경의 GitHub/npm DNS 제한으로 로컬 실행 대신 GitHub Actions를 사용했다. 커밋 `a70ee06ea10fc2e0b80624597add475c3994bf3c`의 [최종 CI](https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool/actions/runs/43604547968)에서 `npm ci`·단위 96/96·타입 검사·빌드·번들 비밀값 검사·기존 브라우저 25/25·클라우드 브라우저 28/28이 통과했다. CI는 Ubuntu 24.04에서 Playwright 1.56.1을 `/tmp/wafer-browser`에 분리 설치한다. 클라우드 28개에는 로그인 대기 중 로그아웃과 다른 탭의 오래된 쓰기 회귀 시험이 포함된다. 클라우드 브라우저의 모의 응답 시험과 실제 Auth·REST·Storage HTTP 시험을 구분한다. 후자는 계정/공개용 키 미준비로 미실시이며 하드웨어 시험도 미실시다. 최종 결과는 `TEST_RESULTS.md`가 기준이다.
 
 ## 2. 고정 규칙과 확정 결정
 
@@ -100,7 +101,9 @@ PC UUID `device_id`와 항목별 소유자 메타데이터를 유지한다. 계�
 
 BAZE에서는 실제 값 파일을 만들지 않고 프로젝트 비밀값 설정을 쓴다. BAZE 밖에서는 무시되는 `.env.local`에 공개용 두 값만 둘 수 있다. 브라우저는 HTTPS Supabase 주소와 현대 publishable key만 받는다. legacy JWT·secret·service_role 키는 허용하지 않는다.
 
-Vite `/api/cloud-config`는 개발·preview 서버에만 있다. 정적 배포에는 공개용 `VITE_` 값을 빌드 때 공급하거나 실제 호스팅 백엔드에 같은 경로를 구현해야 한다. 설정이 없으면 로컬 검사·저장은 계속되고 로그인만 비활성화된다. 환경 변수 변경 뒤 서버를 다시 시작한다.
+Vite `/api/cloud-config`는 개발·preview용이고, Vercel에는 Node 24 `api/cloud-config`와 공통 공개 설정 검증을 구현했다. 미등록 API는 JSON 404, 화면 경로는 SPA fallback으로 처리한다. 새 의존성은 추가하지 않았다. API 없는 다른 정적 호스팅은 공개용 `VITE_` 빌드 설정 또는 같은 출처의 API가 필요하다. 설정이 없으면 로컬 검사·저장은 계속되고 로그인만 비활성화된다.
+
+현재 Vercel 프로젝트는 `prj_wkDJIFpPFENmdYfMXRoDg25ToeWy`, 팀은 `team_jygW9ZnBaGtmwpvrc8QVwKNq`다. `SUPABASE_URL`은 등록돼 있고 `SUPABASE_PUBLISHABLE_KEY`는 없다. Vercel 프로젝트 Settings → Environment Variables의 Production에 공개용 키를 직접 등록한 뒤 다시 배포한다. 키를 채팅으로 받거나 파일로 옮기지 않는다. BAZE와 Vercel 주소는 달라 기존 IndexedDB 기록이 자동 이관되지 않는다.
 
 ## 5. 다음 확인 순서
 

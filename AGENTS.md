@@ -36,11 +36,13 @@
 - BAZE에서는 `SUPABASE_PUBLISHABLE_KEY`와 선택 `SUPABASE_URL`을 서버 환경 변수로 공급한다. `/api/cloud-config`는 공개용 주소/키만 반환한다.
 - BAZE 밖에서는 무시되는 `.env.local`의 `VITE_SUPABASE_URL`/`VITE_SUPABASE_PUBLISHABLE_KEY`를 허용한다. 공개용 키만 넣는다.
 - DB 비밀번호는 작업자의 `SUPABASE_DB_PASSWORD` 환경 변수로만 읽는다. 브라우저에 넣지 않는다. 관리자 키를 가져와 우회하지 않는다.
-- 정적 호스팅에는 Vite 개발/preview 미들웨어가 없다. 공개용 빌드 설정 또는 실제 호스팅 백엔드의 설정 경로가 필요하다.
+- Vercel에는 Node 24 `api/cloud-config`와 공통 공개 설정 검증, 미등록 API JSON 404, SPA fallback을 구현했다. Vite 미들웨어는 개발/preview용이다. API가 없는 다른 정적 호스팅에는 공개용 빌드 설정 또는 같은 출처의 설정 API가 필요하다.
 - 정책 SQL 시험은 rollback한다. Storage의 직접 삭제 방지 장치를 끄지 않는다. SQL 역할 모의 시험과 실제 Auth/REST/Storage HTTP 시험을 구분한다.
 
 ## 검증과 전달
 
-`npm test`, `npm run typecheck`, `npm run build`, 개발 서버에서 `tests/e2e/sim-flow.cjs`·`cloud-flow.cjs`를 실행한다. [최종 CI](https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool/actions/runs/43601806561)에서 단위 88/88·타입 검사·빌드·번들 비밀값 검사·기존 브라우저 25/25·클라우드 브라우저 28/28이 통과했고 실제 SQL RLS는 68/68 통과했다. CI는 Ubuntu 24.04에서 Playwright를 별도 `/tmp` 폴더에 설치한다. 클라우드 브라우저 응답은 모형이며 실제 Auth/REST/Storage HTTP와 하드웨어 시험은 미실시다. 최신 결과는 `TEST_RESULTS.md`가 기준이다.
+`npm test`, `npm run typecheck`, `npm run build`, 개발 서버에서 `tests/e2e/sim-flow.cjs`·`cloud-flow.cjs`를 실행한다. [최종 CI](https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool/actions/runs/43604547968)에서 단위 96/96·타입 검사·빌드·번들 비밀값 검사·기존 브라우저 25/25·클라우드 브라우저 28/28이 통과했고 실제 SQL RLS는 68/68 통과했다. CI는 Ubuntu 24.04에서 Playwright를 별도 `/tmp` 폴더에 설치한다. 클라우드 브라우저 응답은 모형이며 실제 Auth/REST/Storage HTTP와 하드웨어 시험은 미실시다. 최신 결과는 `TEST_RESULTS.md`가 기준이다.
 
 `codex/team-cloud-storage`의 초안 PR #2로 전달한다. **main에 직접 푸시하거나 PR을 임의로 병합하지 않는다.** 키·런타임 자료·`node_modules`·`dist`·`.baze-files`를 커밋하지 않는다.
+
+Vercel Production은 `https://wafer-inspection-4inch.vercel.app`에서 READY로 확인했다. 프로젝트 `prj_wkDJIFpPFENmdYfMXRoDg25ToeWy`, 팀 `team_jygW9ZnBaGtmwpvrc8QVwKNq`다. 배포 코드는 `a70ee06ea10fc2e0b80624597add475c3994bf3c`이며 파일 업로드 배포라 GitHub 자동 동기화가 없다. 코드 수정 후 별도 재배포해야 한다. `SUPABASE_URL`만 등록돼 있고 공개용 키는 미등록이다. 실제 운영 HTTP·브라우저 점검은 연결 문제로 미완료이며 READY를 화면 동작 검증으로 보고하지 않는다. BAZE와 배포 주소의 IndexedDB는 서로 별개다.

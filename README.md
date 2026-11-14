@@ -76,7 +76,7 @@ npm run build       # 타입 검사 + dist/ 정적 파일
 npm run preview     # 빌드 결과 확인 — http://localhost:4173
 ```
 
-- 빌드 결과는 정적 파일이다. 다른 PC에서 쓰려면 HTTPS로 서빙한다 (카메라·USB 시리얼은 HTTPS 또는 localhost에서만 열린다).
+- 웹 화면은 `dist/`에 빌드한다. Vercel 배포에는 Node 24의 `api/` 설정 응답도 함께 포함된다. 카메라·USB 시리얼은 HTTPS 또는 localhost에서만 열린다.
 - 브라우저 시험은 개발 서버에서 실행한다. 개발용 `window.__station`은 배포 빌드에 없다.
 
 ```bash
@@ -88,7 +88,7 @@ node tests/e2e/cloud-flow.cjs
 
 GitHub Actions의 [검증 설정](.github/workflows/verify.yml)도 단위 시험·타입 검사·빌드·브라우저 시나리오·번들 비밀값 검사를 실행한다. 클라우드 브라우저 시나리오의 응답은 시험용 모형이다. 실제 RLS 검증 범위와 하드웨어 미실시 항목은 [TEST_RESULTS.md](TEST_RESULTS.md)를 따른다.
 
-현재 변경은 [초안 PR #2](https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool/pull/2)에서 검토한다. [최종 CI](https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool/actions/runs/43601806561)에서 `npm ci`·단위 88/88·타입 검사·빌드·번들 비밀값 검사·기존 브라우저 25/25·클라우드 브라우저 28/28이 통과했다. 실제 DB의 SQL 역할 모의 RLS 검증은 68/68 통과했다. 클라우드 브라우저는 모의 응답 시험이며 실제 이메일 로그인·REST·Storage HTTP 시험은 계정과 공개용 키 준비 후 별도로 해야 한다.
+현재 변경은 [초안 PR #2](https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool/pull/2)에서 검토한다. [최종 CI](https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool/actions/runs/43604547968)에서 `npm ci`·단위 96/96·타입 검사·빌드·번들 비밀값 검사·기존 브라우저 25/25·클라우드 브라우저 28/28이 통과했다. 실제 DB의 SQL 역할 모의 RLS 검증은 68/68 통과했다. 클라우드 브라우저는 모의 응답 시험이며 실제 이메일 로그인·REST·Storage HTTP 시험은 계정과 공개용 키 준비 후 별도로 해야 한다.
 
 ### Supabase 설정
 
@@ -96,9 +96,16 @@ GitHub Actions의 [검증 설정](.github/workflows/verify.yml)도 단위 시험
 |---|---|
 | BAZE 개발·미리보기 | 프로젝트 비밀값 설정의 `SUPABASE_PUBLISHABLE_KEY`를 서버가 읽는다. `SUPABASE_URL`은 선택이며 기본값은 현재 전용 프로젝트 주소다. 실제 값 파일을 만들지 않는다. 변경 후 서버를 다시 시작한다. |
 | BAZE 밖 로컬 PC | Git에서 제외된 `.env.local`의 `VITE_SUPABASE_URL`과 `VITE_SUPABASE_PUBLISHABLE_KEY`, 또는 위 서버 환경 변수를 쓴다. |
-| 정적 사이트 배포 | 빌드할 때 공개용 `VITE_` 두 값을 공급하거나, 호스팅 백엔드가 같은 출처의 `/api/cloud-config`를 구현해야 한다. Vite 미들웨어는 개발·preview 서버에만 존재한다. |
+| 현재 Vercel 배포 | `api/cloud-config`가 서버 환경 변수의 공개용 설정만 전달한다. Vercel 프로젝트 Settings → Environment Variables에서 Production의 `SUPABASE_PUBLISHABLE_KEY`를 등록하고 다시 배포한다. `SUPABASE_URL`은 등록돼 있다. |
+| API가 없는 다른 정적 호스팅 | 빌드 때 공개용 `VITE_` 두 값을 공급하거나 같은 출처의 설정 API가 필요하다. Vite 미들웨어는 개발·preview 전용이다. |
 
 예시 이름은 [`.env.example`](.env.example)에 있다. 브라우저는 HTTPS Supabase 프로젝트 주소와 `sb_publishable_` 형식 키만 받는다. legacy JWT·secret·service_role 키는 받지 않는다. DB 비밀번호는 작업자의 `SUPABASE_DB_PASSWORD` 환경 변수에만 두고 앱이나 `VITE_` 변수에 넣지 않는다. 설정이 없으면 로그인은 비활성화되고 로컬 검사·저장은 계속 사용할 수 있다.
+
+### 현재 배포
+
+[검사 사이트 열기](https://wafer-inspection-4inch.vercel.app). Vercel에서 Production **READY**를 확인했다. 현재 공개용 키가 없어 로컬 저장 모드가 예상되며 팀 로그인은 아직 연결 전이다. 실제 사이트의 HTTP 응답·화면 점검은 연결 문제로 완료하지 못했다.
+
+이번 배포는 파일 업로드 방식이며 GitHub 자동 배포 연결은 없다. 코드 변경 후 별도 재배포가 필요하고 PR을 main에 합친 상태도 아니다. BAZE와 Vercel은 주소가 달라 기존 BAZE 브라우저 기록이 자동으로 옮겨지지 않는다. 키는 Vercel 환경 변수 설정에 직접 넣고 채팅에 보내지 않는다.
 
 데이터베이스의 [초기 마이그레이션](supabase/migrations/20261114133634_init_team_storage.sql)과 [지연 업로드 보호](supabase/migrations/20261114134435_keep_newer_snapshots.sql)를 현재 전용 프로젝트에 적용했다. `settings`, `inspections`, `events`의 RLS는 영구 로그인 계정 본인 행의 SELECT·INSERT·UPDATE만 허용하고 삭제는 허용하지 않는다. 오래된 탭의 업로드가 최신 검사·설정 행을 되돌리지 못하게 한다. 이미지 버킷도 소유자와 폴더를 확인한다. [RLS SQL 시험 안내](tests/rls/README.md)를 읽고 관리자 연결에서 rollback 시험을 실행한다. 이미 적용한 SQL은 다시 붙여 넣지 않는다.
 
