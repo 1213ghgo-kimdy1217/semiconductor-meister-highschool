@@ -15,6 +15,6 @@
     "noEmit": true,
     "types": ["vite/client", "w3c-web-serial", "node"]
   },
-  "include": ["src", "tests", "vite.config.ts"]
+  "include": ["src", "api", "tests", "vite.config.ts"]
 }
 

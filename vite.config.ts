@@ -2,14 +2,14 @@
 import { defineConfig, type Plugin, type ViteDevServer, type PreviewServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import { validateCloudConfig } from './src/config/cloud';
+import { DEFAULT_SUPABASE_URL, validateCloudConfig } from './src/config/cloud-schema';
 
 function cloudConfigEndpoint(): Plugin {
   const attach = (server: ViteDevServer | PreviewServer) => {
     server.middlewares.use((req, res, next) => {
       if (req.url?.split('?')[0] !== '/api/cloud-config') return next();
       const config = validateCloudConfig({
-        url: process.env.SUPABASE_URL ?? 'https://ebrpuysakbfjjnjwesjh.supabase.co',
+        url: process.env.SUPABASE_URL ?? DEFAULT_SUPABASE_URL,
         publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY,
       });
       res.setHeader('Cache-Control', 'no-store');
