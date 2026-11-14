@@ -1,11 +1,11 @@
 /// <reference types="vitest/config" />
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, type Plugin, type ViteDevServer, type PreviewServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { validateCloudConfig } from './src/config/cloud';
 
 function cloudConfigEndpoint(): Plugin {
-  const attach = (server: { middlewares: { use: (handler: (req: { url?: string }, res: { statusCode: number; setHeader: (name: string, value: string) => void; end: (body: string) => void }, next: () => void) => void) => void } }) => {
+  const attach = (server: ViteDevServer | PreviewServer) => {
     server.middlewares.use((req, res, next) => {
       if (req.url?.split('?')[0] !== '/api/cloud-config') return next();
       const config = validateCloudConfig({

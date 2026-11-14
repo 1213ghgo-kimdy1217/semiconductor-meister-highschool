@@ -135,7 +135,7 @@ export class CloudService {
         throw new Error('로그인 요청이 취소됐어요.');
       }
       if (error || !data.session || data.user?.is_anonymous) {
-        throw new Error(error && (error.status === 429 || error.status >= 500) ? '연결이 원활하지 않아요. 잠시 뒤 다시 로그인해 주세요.' : '이메일과 비밀번호를 확인해 주세요.');
+      throw new Error(error && (error.status === 429 || (error.status ?? 0) >= 500) ? '연결이 원활하지 않아요. 잠시 뒤 다시 로그인해 주세요.' : '이메일과 비밀번호를 확인해 주세요.');
       }
       this.forcedSignedOut = false;
       this.applySession(data.session);

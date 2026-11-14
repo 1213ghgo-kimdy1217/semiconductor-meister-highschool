@@ -26,6 +26,20 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      - name: Resolve pinned Node types lock metadata
+        run: |
+          npm install --package-lock-only --ignore-scripts --save-dev --save-exact @types/node@24.0.0
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
+          console.log('WAFFER_NODE_LOCK_BEGIN');
+          console.log(JSON.stringify({
+            nodeTypes: lock.packages['node_modules/@types/node'],
+            undici: lock.packages['node_modules/undici-types'],
+            rootDev: lock.packages[''].devDependencies,
+          }));
+          console.log('WAFFER_NODE_LOCK_END');
+          NODE
       - name: Install locked dependencies
         run: npm ci
       - name: Unit tests

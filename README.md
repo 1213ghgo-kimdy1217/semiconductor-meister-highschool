@@ -14,6 +14,7 @@
 | [COMMISSIONING.md](COMMISSIONING.md) | 학교 시운전 순서, 단계별 통과 기준, 기록 칸 |
 | [TEST_RESULTS.md](TEST_RESULTS.md) | 소프트웨어 시험 결과(시뮬레이션)와 실제 장치 시험 기록 칸 |
 | [HARDWARE_VALUES.md](HARDWARE_VALUES.md) | 실물로 확인해야 하는 값 목록 (지어낸 값 없음) |
+| [HANDOFF.md](HANDOFF.md) | 현재 구현, 팀 저장 설정과 남은 검증 |
 
 ## 사용 환경
 
@@ -43,11 +44,28 @@
 ### 5) 기록
 - 최근 10개 기록과 정상/불량/보류 집계. 실제 운전·시험 모드·검사만 시험을 섞지 않는다.
 - **기록 내보내기**: CSV(엑셀용). 카메라 판정 · PLC 전달 · PLC 분기 · 배출 동작 종료 · 실물 수거 확인을 칸을 나눠 적는다. 웹은 실물 수거를 알 수 없어 항상 「미확인」이고, 확정 수거 통계에 넣지 않는다.
-- 지금 기록은 **이 PC 브라우저에만** 저장된다. 팀 공유 저장은 아직 연결하지 않았다.
+- 기록은 먼저 이 PC 브라우저의 IndexedDB에 저장한다. 로그인한 계정에 속한 업로드 대기열을 뒤에서 Supabase로 보낸다. 업로드 실패가 카메라 판정이나 Uno 결과 전송을 기다리게 하지 않는다.
+
+### 6) 팀 로그인과 저장
+
+1. Supabase 대시보드 **Authentication → Users**에서 팀 이메일·비밀번호 계정을 만들고 이메일 확인을 완료한다. 앱에는 가입 화면이 없다.
+2. Email 로그인이 켜졌는지 확인하고 공개 신규 가입과 익명 로그인을 끈다. 계정 비밀번호는 팀만 보관하고 코드나 채팅에 넣지 않는다.
+3. 아래 환경 변수 설정을 마친 뒤 앱의 **팀 계정 로그인**에 팀 계정을 입력한다.
+4. 상단 **기록 저장**에서 이 PC 저장 상태와 팀 업로드 상태를 확인한다. 네트워크 실패는 대기열에 남겨 재시도한다. 로그인 만료는 다시 로그인하고, 정책·설정 오류는 원인을 고친 뒤 **저장 다시 시도**를 누른다.
+5. 로그인 전 항목은 자동으로 올리지 않는다. 현재 계정과 항목 수를 확인하고 동의란을 체크한 뒤 **기존 항목 올리기**를 누른다. 검사 기록·이벤트·기준 설정을 포함한 대기 항목 수이므로 웨이퍼 장수와 같지 않을 수 있다.
+6. 로그아웃해도 이 PC 기록은 남는다. 계정 A에 배정된 항목이 다음 로그인 계정 B로 옮겨지지 않는다.
+
+기준 사진은 PC의 `device_id`와 실제/가상 카메라별로 저장한다. 같은 팀 계정이어도 다른 PC의 기준 사진·판정 기준을 자동 적용하지 않는다. 카메라·조명·설치 위치가 바뀌면 해당 PC에서 기준을 다시 등록한다.
+
+### 7) 팀 기록
+
+**팀 기록 보기**(`/team`)에서 같은 계정으로 여러 PC가 올린 기록을 조회한다. 실제 운전·시험 모드·검사만 시험을 골라 25건씩 보고, **선택한 모드 전체 CSV**로 해당 모드 전체를 내려받는다. 새 기록은 **새로 조회**로 불러온다. 계정 변경 시 이전 계정의 조회 결과와 진행 중인 내보내기를 버린다.
+
+사진은 `inspection-images` 비공개 버킷에 저장한다. 검사 썸네일과 기준 사진의 경로만 행에 기록하고 공개 URL을 만들지 않는다. Supabase는 기록·설정 저장 용도이며 장치 명령이나 Realtime 제어 통로로 쓰지 않는다.
 
 ## 설정·빌드 절차
 
-필요: Node.js 20 이상(개발은 Node 24), npm.
+필요: Node.js 24 권장, npm.
 
 ```bash
 npm ci              # package-lock.json 그대로 설치
@@ -59,8 +77,28 @@ npm run preview     # 빌드 결과 확인 — http://localhost:4173
 ```
 
 - 빌드 결과는 정적 파일이다. 다른 PC에서 쓰려면 HTTPS로 서빙한다 (카메라·USB 시리얼은 HTTPS 또는 localhost에서만 열린다).
-- 환경 변수: 지금은 필요 없다. [`.env.example`](.env.example) 참고.
-- 브라우저 시나리오 시험: [`tests/e2e/sim-flow.cjs`](tests/e2e/sim-flow.cjs) 머리말의 실행 방법 참고 (개발 서버에서만 동작).
+- 브라우저 시험은 개발 서버에서 실행한다. 개발용 `window.__station`은 배포 빌드에 없다.
+
+```bash
+npm install --no-save --package-lock=false playwright@1.56.1
+npx playwright install chromium
+node tests/e2e/sim-flow.cjs
+node tests/e2e/cloud-flow.cjs
+```
+
+GitHub Actions의 [검증 설정](.github/workflows/verify.yml)도 단위 시험·타입 검사·빌드·브라우저 시나리오·번들 비밀값 검사를 실행한다. 클라우드 브라우저 시나리오의 응답은 시험용 모형이다. 실제 RLS 검증 범위와 하드웨어 미실시 항목은 [TEST_RESULTS.md](TEST_RESULTS.md)를 따른다.
+
+### Supabase 설정
+
+| 환경 | 공개용 설정을 주는 방법 |
+|---|---|
+| BAZE 개발·미리보기 | 프로젝트 비밀값 설정의 `SUPABASE_PUBLISHABLE_KEY`를 서버가 읽는다. `SUPABASE_URL`은 선택이며 기본값은 현재 전용 프로젝트 주소다. 실제 값 파일을 만들지 않는다. 변경 후 서버를 다시 시작한다. |
+| BAZE 밖 로컬 PC | Git에서 제외된 `.env.local`의 `VITE_SUPABASE_URL`과 `VITE_SUPABASE_PUBLISHABLE_KEY`, 또는 위 서버 환경 변수를 쓴다. |
+| 정적 사이트 배포 | 빌드할 때 공개용 `VITE_` 두 값을 공급하거나, 호스팅 백엔드가 같은 출처의 `/api/cloud-config`를 구현해야 한다. Vite 미들웨어는 개발·preview 서버에만 존재한다. |
+
+예시 이름은 [`.env.example`](.env.example)에 있다. 브라우저는 HTTPS Supabase 프로젝트 주소와 `sb_publishable_` 형식 키만 받는다. legacy JWT·secret·service_role 키는 받지 않는다. DB 비밀번호는 작업자의 `SUPABASE_DB_PASSWORD` 환경 변수에만 두고 앱이나 `VITE_` 변수에 넣지 않는다. 설정이 없으면 로그인은 비활성화되고 로컬 검사·저장은 계속 사용할 수 있다.
+
+데이터베이스의 [초기 마이그레이션](supabase/migrations/20261114133318_init_team_storage.sql)은 현재 전용 프로젝트에 적용했다. `settings`, `inspections`, `events`의 RLS는 영구 로그인 계정 본인 행의 SELECT·INSERT·UPDATE만 허용하고 삭제는 허용하지 않는다. 이미지 버킷도 소유자와 폴더를 확인한다. [RLS SQL 시험 안내](tests/rls/README.md)를 읽고 관리자 연결에서 rollback 시험을 실행한다. 이미 적용한 프로젝트에 초기 SQL을 다시 붙여 넣지 않는다.
 
 ## 코드 구조
 
@@ -76,8 +114,12 @@ npm run preview     # 빌드 결과 확인 — http://localhost:4173
 | `src/core/station` | PLC 검사 요청 하나 처리 — 보낼지·기다릴지·촬영 실패 |
 | `src/core/process` | 공정 단계 표시 (Uno STATUS 기준) |
 | `src/core/store` | IndexedDB 기록·이벤트·설정, CSV |
+| `src/core/cloud` | 업로드 대기열, 자료 변환, 재시도, 로그인과 팀 조회 |
 | `src/core/specimen` | 인쇄용 시편 SVG |
 | `src/app` | 화면 상태 연결 |
-| `src/ui`, `src/pages` | 검사 콘솔 `/`, 인쇄용 시편 `/print` |
+| `src/ui`, `src/pages` | 검사 콘솔 `/`, 인쇄용 시편 `/print`, 팀 기록 `/team` |
+| `src/config/cloud.ts`, `vite.config.ts` | 공개용 설정 검증과 개발·preview 설정 응답 |
+| `supabase/migrations`, `tests/rls` | DB 스키마·소유자 정책과 SQL 검증 |
 | `src/config/hardware.ts` | `PLC_INTERFACE_VERIFIED` — 시운전 뒤에만 true (표시용) |
 | `tests` | 단위 시험, `tests/e2e` 브라우저 시나리오 |
+
