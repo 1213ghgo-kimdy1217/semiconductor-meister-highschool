@@ -22,8 +22,9 @@
 - 팀 로그인과 기록 공유(Supabase), 앱에서 인쇄용 시편 만들기를 하기로 했다. 시편은 완료, Supabase는 연결 전이라 미구현.
 
 남은 일
-- Supabase 연결 뒤 팀 로그인·공유 저장(설정·검사·이벤트 테이블, 소유 행만 읽고 쓰는 정책, 비공개 이미지 저장소, 실패 시 브라우저 대기열과 재시도).
+- Supabase 연결 뒤 팀 로그인·공유 저장(설정·검사·이벤트 테이블, 소유 행만 읽고 쓰는 정책, 비공개 이미지 저장소, 실패 시 브라우저 대기열과 재시도). 사용자가 Supabase 사이트에서 wafer-inspection-4inch를 직접 만들었다(2026-11-14). 지역은 대시보드에 서울이 없어 Asia-Pacific을 골랐고, 실제로는 호주 시드니(ap-southeast-2)에 만들어졌다. 연결 토큰은 다시 연결해도 프로젝트 만들기·표 만들기·키 읽기 권한이 없다. 그래서 표는 환경 변수 SUPABASE_DB_PASSWORD로 데이터베이스에 직접 붙어 만들고, 앱은 공개용 키 SUPABASE_PUBLISHABLE_KEY를 개발 서버가 환경 변수에서 읽어 건네는 방식으로 하기로 했다. 두 값은 파일에 쓰지 않는다. 처음 넣은 두 값은 맞지 않아서 사용자가 설정 > 환경 변수에서 고치기로 했다. 로그인은 팀이 함께 쓰는 계정 하나로 여러 PC가 같은 기록을 보는 방식으로 제안했다.
 - 펌웨어 `arduino/Wafer_Two_Gate_PLC/controller.h`와 STL은 아직 받지 못했다. 받으면 PROTOCOL.md 10장 표로 대조한다.
 - 실제 카메라 재촬영(정상·불량 각 10회 이상)과 실물 통합 인수는 학교에서 COMMISSIONING.md 순서로 한다.
+- 다음 작업자용 인수인계(한 일·막힌 곳·남은 일·표 초안)는 저장소 루트 `HANDOFF.md`에 있다. `.baze-files/outputs/HANDOFF_GPT.md`와 같은 내용이다. GPT에게 줄 프롬프트는 `.baze-files/outputs/GPT_PROMPT.md`에 있다. 지시서 사본은 `.baze-files/outputs/`에만 있다. 공개 저장소라 `.baze-files/`는 커밋하지 않는다.
 
 시험: 단위 59개(`npm test`), 시험 모드 브라우저 시나리오 25개(`tests/e2e/sim-flow.cjs`). 결과는 TEST_RESULTS.md.
