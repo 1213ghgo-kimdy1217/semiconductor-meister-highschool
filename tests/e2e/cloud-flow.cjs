@@ -70,6 +70,14 @@ function ownerFrom(request) {
   let cloudUnavailable = false;
   let historyRequests = 0;
   const historyModes = [];
+  let delayPasswordLogin = false;
+  let delayedLoginEntered = false;
+  let releaseDelayedLogin = null;
+  let raceInspectionId = null;
+  let delayedWriteEntered = false;
+  let releaseDelayedWrite = null;
+  let newerWriteOverlapped = false;
+  const raceWriteOrder = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('dialog', (dialog) => dialog.accept());
   page.setDefaultTimeout(15000);
@@ -93,6 +101,10 @@ function ownerFrom(request) {
     if (url.pathname === '/auth/v1/token') {
       const body = request.postDataJSON();
       const id = body.email === 'team-b@example.test' || body.refresh_token?.includes(OWNER_B) ? OWNER_B : OWNER_A;
+      if (delayPasswordLogin && url.searchParams.get('grant_type') === 'password') {
+        delayedLoginEntered = true;
+        await new Promise((resolve) => { releaseDelayedLogin = resolve; });
+      }
       return fulfill(route, session(id));
     }
     if (url.pathname === '/auth/v1/user') return fulfill(route, user(owner || OWNER_A));
@@ -114,12 +126,21 @@ function ownerFrom(request) {
         const data = request.postDataJSON();
         const rows = Array.isArray(data) ? data : [data];
         for (const row of rows) {
+          if (table === 'inspections' && row.id === raceInspectionId) {
+            if (row.method === 'multi-tab-old' && !delayedWriteEntered) {
+              delayedWriteEntered = true;
+              await new Promise((resolve) => { releaseDelayedWrite = resolve; });
+            } else if (row.method === 'multi-tab-new' && releaseDelayedWrite) {
+              newerWriteOverlapped = true;
+            }
+          }
           writeOwners.push({ tokenOwner: owner, rowOwner: row.owner_id, table, id: row.id });
           if (!owner || row.owner_id !== owner) return fulfill(route, { code: '42501', message: 'Mock ownership denied' }, 403);
           const key = table === 'inspections' ? row.id : table === 'events'
             ? `${row.owner_id}:${row.device_id}:${row.local_event_id}`
             : `${row.owner_id}:${row.device_id}:${row.camera_id}`;
           target.set(key, { ...target.get(key), ...row, created_at: row.created_at || row.requested_at || new Date().toISOString() });
+          if (table === 'inspections' && row.id === raceInspectionId) raceWriteOrder.push(row.method);
         }
         return fulfill(route, rows, 201);
       }
@@ -322,11 +343,71 @@ function ownerFrom(request) {
     await until(async () => await page.getByTestId('team-prev').isEnabled());
     check('Team history loads later pages instead of only the local recent list', await page.getByTestId('team-prev').isEnabled()
       && (await page.getByTestId('team-records').innerText()) !== firstPage);
+
+    // Regression: an old sign-in response must not undo a later logout.
+    await page.getByTestId('cloud-logout').click();
+    await until(async () => (await cloud()).ownerId === null);
+    delayPasswordLogin = true;
+    await page.evaluate(() => {
+      window.__e2eLogin = window.__station.cloud.login('team-a@example.test', 'mock-password-for-browser-tests-only')
+        .then(() => 'resolved', () => 'cancelled');
+    });
+    await until(() => delayedLoginEntered);
+    await page.evaluate(() => { window.__e2eLogout = window.__station.cloud.signOut(); });
+    const finishLogin = releaseDelayedLogin;
+    releaseDelayedLogin = null;
+    delayPasswordLogin = false;
+    finishLogin?.();
+    await page.evaluate(async () => { await Promise.all([window.__e2eLogin, window.__e2eLogout]); });
+    await wait(400);
+    const cancelledLogin = await page.evaluate(() => ({
+      owner: window.__station.cloud.snapshot.ownerId,
+      state: window.__station.cloud.snapshot.state,
+      savedToken: localStorage.getItem('wafer-cloud-auth:wafer-test.supabase.co') !== null,
+    }));
+    check('A delayed login response cannot restore a logged-out session or saved token', delayedLoginEntered
+      && cancelledLogin.owner === null && cancelledLogin.state === 'signed_out' && !cancelledLogin.savedToken);
+
+    // Regression: both tabs share a device and durable queue. Hold the older
+    // request while another tab commits a newer revision of the same record.
+    await login('a');
+    await settled();
+    const secondPage = await context.newPage();
+    secondPage.on('pageerror', (error) => errors.push(error.message));
+    secondPage.setDefaultTimeout(15000);
+    await secondPage.goto(`${BASE}/team`, { waitUntil: 'networkidle' });
+    await secondPage.waitForFunction((id) => window.__station?.cloud.snapshot.ownerId === id, OWNER_A);
+    const sharedDevice = await secondPage.evaluate(() => window.__station.store.deviceId);
+    const firstDevice = await page.evaluate(() => window.__station.store.deviceId);
+    raceInspectionId = '77777777-7777-4777-8777-777777777777';
+    const oldRevision = { ...seedRecord(raceInspectionId), method: 'multi-tab-old', updatedAt: new Date().toISOString() };
+    const newRevision = { ...oldRevision, method: 'multi-tab-new', updatedAt: new Date(Date.now() + 1000).toISOString() };
+    await page.evaluate((record) => window.__station.store.putRecord(record), oldRevision);
+    await until(() => delayedWriteEntered);
+    await secondPage.evaluate((record) => window.__station.store.putRecord(record), newRevision);
+    await until(() => secondPage.evaluate(async (id) => {
+      const records = await window.__station.store.allRecords();
+      return records.some((record) => record.id === id && record.method === 'multi-tab-new')
+        && window.__station.store.status.pending === 0;
+    }, raceInspectionId));
+    await wait(500);
+    const releaseOldWrite = releaseDelayedWrite;
+    releaseDelayedWrite = null;
+    releaseOldWrite?.();
+    await until(async () => inspections.get(raceInspectionId)?.method === 'multi-tab-new'
+      && !(await outbox()).some((item) => item.kind === 'inspection' && item.payload.id === raceInspectionId));
+    check('Two tabs serialize read-upload-ack and preserve the newest server revision', firstDevice === sharedDevice
+      && delayedWriteEntered && !newerWriteOverlapped
+      && inspections.get(raceInspectionId)?.method === 'multi-tab-new'
+      && raceWriteOrder[0] === 'multi-tab-old' && raceWriteOrder.at(-1) === 'multi-tab-new');
+    await secondPage.close();
     check('Every mock cloud write uses its signed-in owner', writeOwners.length > 0 && writeOwners.every((write) => write.rowOwner === write.tokenOwner));
   } catch (error) {
     check('Cloud browser scenarios complete without exception', false);
     console.error(String(error).split('\n').slice(0, 4).join('\n'));
   } finally {
+    releaseDelayedLogin?.();
+    releaseDelayedWrite?.();
     check('No uncaught browser exceptions', errors.length === 0);
     await browser.close();
     const failures = results.filter((result) => !result.ok).length;

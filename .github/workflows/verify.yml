@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -26,20 +26,6 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - name: Resolve pinned Node types lock metadata
-        run: |
-          npm install --package-lock-only --ignore-scripts --save-dev --save-exact @types/node@24.0.0
-          node --input-type=module <<'NODE'
-          import { readFileSync } from 'node:fs';
-          const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
-          console.log('WAFFER_NODE_LOCK_BEGIN');
-          console.log(JSON.stringify({
-            nodeTypes: lock.packages['node_modules/@types/node'],
-            undici: lock.packages['node_modules/undici-types'],
-            rootDev: lock.packages[''].devDependencies,
-          }));
-          console.log('WAFFER_NODE_LOCK_END');
-          NODE
       - name: Install locked dependencies
         run: npm ci
       - name: Unit tests
@@ -78,9 +64,11 @@ jobs:
           NODE
       - name: Install browser test runner
         run: |
-          npm install --no-save --package-lock=false playwright@1.56.1
-          npx playwright install --with-deps chromium
+          npm install --prefix /tmp/wafer-browser --package-lock=false --ignore-scripts --no-audit playwright@1.56.1
+          /tmp/wafer-browser/node_modules/.bin/playwright install --with-deps chromium
       - name: Browser scenarios with simulated devices and cloud
+        env:
+          PLAYWRIGHT_MODULE: /tmp/wafer-browser/node_modules/playwright
         run: |
           npm run dev -- --strictPort > /tmp/wafer-vite.log 2>&1 &
           SERVER_PID=$!
