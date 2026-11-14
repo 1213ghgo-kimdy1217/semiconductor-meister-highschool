@@ -29,7 +29,7 @@
 
 ## Supabase와 비밀값
 
-전용 프로젝트 ref는 `ebrpuysakbfjjnjwesjh`다. 초기 마이그레이션은 `supabase/migrations/20261114133318_init_team_storage.sql`이며 이미 적용했다. 세 표와 비공개 `inspection-images` 버킷이 있다. 모든 공개 표에 RLS를 켜고 본인 행 SELECT·INSERT·UPDATE만 허용한다. 익명 Auth도 차단한다. UPDATE는 USING/WITH CHECK를 함께 둔다. 이벤트는 다른 소유자의 검사 행을 참조할 수 없다.
+전용 프로젝트 ref는 `ebrpuysakbfjjnjwesjh`다. `supabase/migrations/20261114133634_init_team_storage.sql`과 `20261114134435_keep_newer_snapshots.sql`을 적용했다. 세 표·비공개 `inspection-images` 버킷과 지연 업로드 보호가 있다. 모든 공개 표에 RLS를 켜고 본인 행 SELECT·INSERT·UPDATE만 허용한다. 익명 Auth도 차단한다. UPDATE는 USING/WITH CHECK를 함께 둔다. 이벤트는 다른 소유자의 검사 행을 참조할 수 없다. 오래된 탭이 새 검사/설정 행을 덮어쓰게 하지 않는다.
 
 - 팀 이메일/비밀번호 계정은 Supabase 대시보드에서 만든다. 앱에는 가입 화면을 두지 않는다.
 - 실제 키·비밀번호를 코드·번들·문서·GitHub·채팅·출력에 넣지 않는다. 앞부분도 출력하지 않는다. 비밀번호를 채팅으로 요구하지 않는다.
@@ -41,6 +41,6 @@
 
 ## 검증과 전달
 
-`npm test`, `npm run typecheck`, `npm run build`, 개발 서버에서 `tests/e2e/sim-flow.cjs`·`cloud-flow.cjs`를 실행한다. 기존 기준은 단위 59개·브라우저 25개였으며 현재 결과는 `TEST_RESULTS.md`가 기준이다. 번들 비밀값 검사를 실행한다. 실제 서비스 시험에 필요한 설정이 없으면 그 한계를 기록한다.
+`npm test`, `npm run typecheck`, `npm run build`, 개발 서버에서 `tests/e2e/sim-flow.cjs`·`cloud-flow.cjs`를 실행한다. [최종 CI](https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool/actions/runs/43601806561)에서 단위 88/88·타입 검사·빌드·번들 비밀값 검사·기존 브라우저 25/25·클라우드 브라우저 28/28이 통과했고 실제 SQL RLS는 68/68 통과했다. CI는 Ubuntu 24.04에서 Playwright를 별도 `/tmp` 폴더에 설치한다. 클라우드 브라우저 응답은 모형이며 실제 Auth/REST/Storage HTTP와 하드웨어 시험은 미실시다. 최신 결과는 `TEST_RESULTS.md`가 기준이다.
 
-새 브랜치에 커밋하고 PR로 전달한다. **main에 직접 푸시하거나 PR을 임의로 병합하지 않는다.** 키·런타임 자료·`node_modules`·`dist`·`.baze-files`를 커밋하지 않는다.
+`codex/team-cloud-storage`의 초안 PR #2로 전달한다. **main에 직접 푸시하거나 PR을 임의로 병합하지 않는다.** 키·런타임 자료·`node_modules`·`dist`·`.baze-files`를 커밋하지 않는다.

@@ -6,16 +6,16 @@
 
 - 기존 검사 콘솔·시험 모드·기준 등록·판정·CSV·인쇄 시편 위에 Supabase 팀 로그인·지속 저장 대기열·팀 기록 조회를 추가하는 변경이다.
 - 사용자는 초안을 참고해 다시 구성하고 연결 설정을 기다리는 동안에도 구현하도록 승인했다.
-- 기존 전용 Supabase 프로젝트에 `settings`·`inspections`·`events`, 소유자 RLS와 비공개 이미지 버킷을 초기 마이그레이션으로 적용했다. SQL 역할 모의 RLS 시험은 66/66 통과했고 보안 advisors는 0건이었다. 실제 이메일 로그인·REST·Storage HTTP 경로 시험과는 별개다.
+- 기존 전용 Supabase 프로젝트에 두 마이그레이션을 적용했다. 세 표·소유자 RLS·비공개 이미지 버킷과, 지연된 업로드가 새 기록/설정을 덮어쓰지 않게 하는 보호가 있다. SQL 역할 모의 RLS 시험은 68/68 통과했고 보안 advisors는 0건이었다. 시험 rollback 뒤 사용자·검사·이미지 행은 모두 0개임을 확인했다. 실제 이메일 로그인·REST·Storage HTTP 경로 시험과는 별개다.
 - 확인 시점의 Auth 사용자 수는 0명이었다. 현재 작업 환경에는 `SUPABASE_DB_PASSWORD`와 `SUPABASE_PUBLISHABLE_KEY`가 없었다. 이전 BAZE 대화에는 두 값이 잘못됐다는 기록이 있다. 이후 변경 여부는 값을 노출하지 않고 다시 검증한다.
-- 작업 브랜치는 `codex/team-cloud-storage`다. PR 상태는 GitHub에서 확인한다. main 직접 푸시·임의 병합은 하지 않는다.
+- 작업 브랜치는 `codex/team-cloud-storage`, 검토용 [초안 PR #2](https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool/pull/2)가 열려 있다. main 직접 푸시·임의 병합은 하지 않는다.
 - 실제 카메라·Uno·PLC·HMI·기구 통합은 미실시다.
 
 ## 1. 저장소와 실행
 
 저장소: [semiconductor-meister-highschool](https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool). 별도 SemiGuard 교육 사이트 `semiguard-ai`는 수정하지 않는다.
 
-Vite 7·React 19·TypeScript 5.9·Tailwind 4·react-router 7·idb 8, Supabase JS 2.119.0을 쓴다. `package-lock.json`을 유지하고 Node.js 24를 권장한다.
+Vite 7·React 19·TypeScript 5.9·Tailwind 4·react-router 7·idb 8, Supabase JS 2.119.0을 쓴다. `@types/node` 24.0.0과 `undici-types` 7.8.0도 lockfile에 고정했다. `package-lock.json`을 유지하고 Node.js 24를 권장한다.
 
 ```bash
 npm ci
@@ -35,7 +35,7 @@ node tests/e2e/sim-flow.cjs
 node tests/e2e/cloud-flow.cjs
 ```
 
-작업 환경의 GitHub/npm DNS 제한으로 로컬 의존성 설치와 시험이 막혀 GitHub Actions 검증을 준비했다. 최종 실행별 결과는 `TEST_RESULTS.md`가 기준이다. 기존 기록인 단위 59개·브라우저 25개 통과를 이번 변경의 재검증 결과로 인용하지 않는다.
+작업 환경의 GitHub/npm DNS 제한으로 로컬 실행 대신 GitHub Actions를 사용했다. 커밋 `3a542c4caf52c89797f557c18aff5af8554a2322`의 [최종 CI](https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool/actions/runs/43601806561)에서 `npm ci`·단위 88/88·타입 검사·빌드·번들 비밀값 검사·기존 브라우저 25/25·클라우드 브라우저 28/28이 통과했다. CI는 Ubuntu 24.04에서 Playwright 1.56.1을 `/tmp/wafer-browser`에 분리 설치한다. 클라우드 28개에는 로그인 대기 중 로그아웃과 다른 탭의 오래된 쓰기 회귀 시험이 포함된다. 클라우드 브라우저의 모의 응답 시험과 실제 Auth·REST·Storage HTTP 시험을 구분한다. 후자는 계정/공개용 키 미준비로 미실시이며 하드웨어 시험도 미실시다. 최종 결과는 `TEST_RESULTS.md`가 기준이다.
 
 ## 2. 고정 규칙과 확정 결정
 
@@ -80,11 +80,12 @@ PC UUID `device_id`와 항목별 소유자 메타데이터를 유지한다. 계�
 | 전용 프로젝트 | `wafer-inspection-4inch` |
 | ref / API 주소 | `ebrpuysakbfjjnjwesjh` / `https://ebrpuysakbfjjnjwesjh.supabase.co` |
 | 지역 | `ap-southeast-2` (호주 시드니) |
-| 마이그레이션 | `supabase/migrations/20261114133318_init_team_storage.sql` |
+| 마이그레이션 | `supabase/migrations/20261114133634_init_team_storage.sql` |
+| 지연 업로드 보호 | `supabase/migrations/20261114134435_keep_newer_snapshots.sql` |
 | 표 | `public.settings`, `public.inspections`, `public.events` |
 | 이미지 | 비공개 `inspection-images`, PNG/JPEG·2MiB 제한 |
 
-초기 마이그레이션은 이번 연결의 Supabase 도구로 적용했다. 이전 BAZE 토큰의 403 제한을 현재 도구 권한으로 단정하지 않는다. 이미 적용한 초기 SQL은 재실행하지 않고 새 변경은 별도 마이그레이션으로 만든다.
+두 마이그레이션은 이번 연결의 Supabase 도구로 적용했다. 두 번째는 `settings`·`inspections`의 더 오래된 `local_updated_at` 업로드가 최신 행을 되돌리지 못하게 한다. 이전 BAZE 토큰의 403 제한을 현재 도구 권한으로 단정하지 않는다. 이미 적용한 SQL은 재실행하지 않고 새 변경은 별도 마이그레이션으로 만든다.
 
 초안 대비 변경: `settings` 키는 `(owner_id,device_id,camera_id)`다. 검사 중복 기준에도 PC를 넣었다. 이벤트는 `(owner_id,device_id,local_event_id)`로 중복을 막고 소유자까지 포함한 외래키로 타인 검사 참조를 막는다. 세 표는 영구 로그인 사용자 본인 행 SELECT·INSERT·UPDATE만 허용하며 DELETE 권한은 없다. UPDATE에 USING/WITH CHECK를 함께 둔다. Storage는 소유 폴더와 객체 소유자가 모두 일치해야 한다.
 
@@ -111,7 +112,7 @@ Supabase **Authentication → Users → Add user**에서 팀 계정을 만들고
 
 ### 5-2. 데이터베이스 검증
 
-`tests/rls/owner-policies.sql`은 관리자 연결에서 실행하고 전부 rollback한다. 66개 SQL 검증은 통과했다. A·B·익명 Auth·미로그인의 표/이미지 접근을 검사하며 Storage의 직접 삭제 방지 장치는 유지한다.
+`tests/rls/owner-policies.sql`은 관리자 연결에서 실행하고 전부 rollback한다. 68개 SQL 검증은 통과했다. A·B·익명 Auth·미로그인의 표/이미지 접근과 지연 업로드 보호를 검사하며 Storage의 직접 삭제 방지 장치는 유지한다.
 
 실제 Auth·REST·Storage 검증에는 두 임시 사용자로 로그인해 본인 쓰기, 타인 조회/수정/소유자 위조 거부, 타인 폴더 읽기/업로드 거부를 따로 확인해야 한다. 준비되지 않은 시험은 TEST_RESULTS에 미실시로 남긴다.
 

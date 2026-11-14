@@ -88,6 +88,8 @@ node tests/e2e/cloud-flow.cjs
 
 GitHub Actions의 [검증 설정](.github/workflows/verify.yml)도 단위 시험·타입 검사·빌드·브라우저 시나리오·번들 비밀값 검사를 실행한다. 클라우드 브라우저 시나리오의 응답은 시험용 모형이다. 실제 RLS 검증 범위와 하드웨어 미실시 항목은 [TEST_RESULTS.md](TEST_RESULTS.md)를 따른다.
 
+현재 변경은 [초안 PR #2](https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool/pull/2)에서 검토한다. [최종 CI](https://github.com/1213ghgo-kimdy1217/semiconductor-meister-highschool/actions/runs/43601806561)에서 `npm ci`·단위 88/88·타입 검사·빌드·번들 비밀값 검사·기존 브라우저 25/25·클라우드 브라우저 28/28이 통과했다. 실제 DB의 SQL 역할 모의 RLS 검증은 68/68 통과했다. 클라우드 브라우저는 모의 응답 시험이며 실제 이메일 로그인·REST·Storage HTTP 시험은 계정과 공개용 키 준비 후 별도로 해야 한다.
+
 ### Supabase 설정
 
 | 환경 | 공개용 설정을 주는 방법 |
@@ -98,7 +100,7 @@ GitHub Actions의 [검증 설정](.github/workflows/verify.yml)도 단위 시험
 
 예시 이름은 [`.env.example`](.env.example)에 있다. 브라우저는 HTTPS Supabase 프로젝트 주소와 `sb_publishable_` 형식 키만 받는다. legacy JWT·secret·service_role 키는 받지 않는다. DB 비밀번호는 작업자의 `SUPABASE_DB_PASSWORD` 환경 변수에만 두고 앱이나 `VITE_` 변수에 넣지 않는다. 설정이 없으면 로그인은 비활성화되고 로컬 검사·저장은 계속 사용할 수 있다.
 
-데이터베이스의 [초기 마이그레이션](supabase/migrations/20261114133318_init_team_storage.sql)은 현재 전용 프로젝트에 적용했다. `settings`, `inspections`, `events`의 RLS는 영구 로그인 계정 본인 행의 SELECT·INSERT·UPDATE만 허용하고 삭제는 허용하지 않는다. 이미지 버킷도 소유자와 폴더를 확인한다. [RLS SQL 시험 안내](tests/rls/README.md)를 읽고 관리자 연결에서 rollback 시험을 실행한다. 이미 적용한 프로젝트에 초기 SQL을 다시 붙여 넣지 않는다.
+데이터베이스의 [초기 마이그레이션](supabase/migrations/20261114133634_init_team_storage.sql)과 [지연 업로드 보호](supabase/migrations/20261114134435_keep_newer_snapshots.sql)를 현재 전용 프로젝트에 적용했다. `settings`, `inspections`, `events`의 RLS는 영구 로그인 계정 본인 행의 SELECT·INSERT·UPDATE만 허용하고 삭제는 허용하지 않는다. 오래된 탭의 업로드가 최신 검사·설정 행을 되돌리지 못하게 한다. 이미지 버킷도 소유자와 폴더를 확인한다. [RLS SQL 시험 안내](tests/rls/README.md)를 읽고 관리자 연결에서 rollback 시험을 실행한다. 이미 적용한 SQL은 다시 붙여 넣지 않는다.
 
 ## 코드 구조
 
